@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.IO;
 namespace DSMlib
 {
+
     public class LearningParameters
     {
         public static float learning_rate = 0.1f;
@@ -29,6 +30,9 @@ namespace DSMlib
 
     class Program
     {
+        [DllImport("msvcrt.dll")]
+        static extern bool system(string str);
+
         static FileStream log_stream = null;//new FileStream(ParameterSetting.Log_FileName + "SEED" + ParameterSetting.RANDOMSEED.ToString(), FileMode.Create, FileAccess.Write);
         static StreamWriter log_writer = null; // new StreamWriter(log_stream);
         
@@ -48,11 +52,7 @@ namespace DSMlib
         {
             try
             {
-                if (args.Length <= 0)
-                {
-                    Console.WriteLine("Please specify config file:");
-                    return;
-                }
+                ParameterSetting.LoadArgs("cdssm.config.txt");
 
                 ParameterSetting.LoadArgs(args[0]);
                 string logDirecotry = new FileInfo(ParameterSetting.Log_FileName).Directory.FullName;
