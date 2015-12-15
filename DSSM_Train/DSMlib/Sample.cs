@@ -10,7 +10,7 @@ namespace DSMlib
    
     public class BatchSample_Input : IDisposable
     {
-
+        public int batchsize = ParameterSetting.BATCH_SIZE;
         CudaPieceInt word_Idx;
         CudaPieceInt sample_Idx;
 
