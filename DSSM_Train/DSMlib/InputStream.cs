@@ -18,17 +18,15 @@ namespace DSMlib
         PairRegressioinScore
     }
 
-    public class SequenceInputStream:IDisposable
+    public class SequenceInputStream : IDisposable
     {
         public BatchSample_Input Data = null;
 
-        public int total_Batch_Size = 0;
-        public int Feature_Size = 0;
-        public int MAXELEMENTS_PERBATCH = 0;
-        public int MAXSEQUENCE_PERBATCH = 0;
+        public int nLine = 0;
+        public int maxElementsPerBatch = 0;
+        public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
         public int BATCH_INDEX = 0;
-        public int LAST_INCOMPLETE_BATCH_SIZE = 0;
         FileStream mstream = null;
         BinaryReader mreader = null;
 
@@ -39,14 +37,14 @@ namespace DSMlib
 
         public void CloseStream()
         {
-            if(mstream != null)
+            if (mstream != null)
             {
                 mreader.Close();
                 mstream.Close();
                 mreader = null;
                 mstream = null;
             }
-            if(Data != null)
+            if (Data != null)
             {
                 Data.Dispose();
                 Data = null;
@@ -55,103 +53,43 @@ namespace DSMlib
 
         public void get_dimension(string fileName)
         {
-            if (ParameterSetting.LoadInputBackwardCompatibleMode == "BOW")
-            {
-                // code for back-compatibility to the previous BOW bin format
-                mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-                mreader = new BinaryReader(mstream);
-                mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
+            mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            mreader = new BinaryReader(mstream);
+            mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
 
-                Feature_Size = mreader.ReadInt32(); //// binary feature file stores feature dimension
-                total_Batch_Size = mreader.ReadInt32();                
-                MAXELEMENTS_PERBATCH = mreader.ReadInt32();
-                MAXSEQUENCE_PERBATCH = ParameterSetting.BATCH_SIZE;                
-            }
-            else if (ParameterSetting.LoadInputBackwardCompatibleMode == "SEQ")
-            {
-                // code for back-compatibility to the previous SEQ bin format, with unnecessary batch_size and feature_dim
-                mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-                mreader = new BinaryReader(mstream);
-                mstream.Seek(-4 * sizeof(Int32), SeekOrigin.End);
+            nLine = mreader.ReadInt32();
+            maxElementsPerBatch = mreader.ReadInt32();
 
-                Feature_Size = mreader.ReadInt32(); //// binary feature file stores feature dimension           
-                total_Batch_Size = mreader.ReadInt32();
-                MAXSEQUENCE_PERBATCH = mreader.ReadInt32();
-                MAXELEMENTS_PERBATCH = mreader.ReadInt32();
-            }
-            else
-            {
-                mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-                mreader = new BinaryReader(mstream);
-                mstream.Seek(-5 * sizeof(Int32), SeekOrigin.End);
+            Data = new BatchSample_Input(ParameterSetting.BATCH_SIZE, maxElementsPerBatch);
 
-                Feature_Size = mreader.ReadInt32(); //// binary feature file stores feature dimension           
-                total_Batch_Size = mreader.ReadInt32();
-                MAXSEQUENCE_PERBATCH = mreader.ReadInt32();
-                MAXELEMENTS_PERBATCH = mreader.ReadInt32();
-                int batch_size = mreader.ReadInt32();
-                if (batch_size != ParameterSetting.BATCH_SIZE)
-                {
-                    throw new Exception(string.Format(
-                        "Batch_Size does not match between configuration and input data!\n\tFrom config: {0}.\n\tFrom data ({1}): {2}"
-                        , ParameterSetting.BATCH_SIZE, fileName, batch_size)
-                        );
-                }
-            }
-            Data = new BatchSample_Input(ParameterSetting.BATCH_SIZE, MAXSEQUENCE_PERBATCH, MAXELEMENTS_PERBATCH);
-            
-            BATCH_NUM = (total_Batch_Size + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
-            LAST_INCOMPLETE_BATCH_SIZE = total_Batch_Size % ParameterSetting.BATCH_SIZE;
+            BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
             BATCH_INDEX = 0;
         }
-        
+
         public void Init()
         {
             BATCH_INDEX = 0;
             mstream.Seek(0, SeekOrigin.Begin);
         }
 
-        void LoadDataBatch(int allowedFeatureDimension)
+        void LoadDataBatch()
         {
-            int expectedBatchSize = ParameterSetting.BATCH_SIZE;
-            if(BATCH_INDEX == BATCH_NUM - 1 && LAST_INCOMPLETE_BATCH_SIZE != 0)
-            {
-                // only when the last batch is less than BATCH_SIZE, we will need some care
-                expectedBatchSize = LAST_INCOMPLETE_BATCH_SIZE;
-            }
-
-            if(Feature_Size <= allowedFeatureDimension)
-            {
-                //// if the feature_size of the entire stream is not bigger than the allowed feature dimension,
-                //// we just load the batch without the need of reading perbatch feature size or filtering OOV features
-                Data.Load(mreader, expectedBatchSize, false);
-            }
-            else
-            {
-                //// if the feature_size of the entire stream is *bigger than* the allowed feature dimension,
-                //// we need to read the feature size of the current batch, 
-                //// and filter OOV feature if the feature size of the current batch is greater than the allowed feature dimension
-                int featureDimInThisBatch = Data.Load(mreader, expectedBatchSize, true);
-                if (featureDimInThisBatch > allowedFeatureDimension)
-                {
-                    Data.FilterOOVFeature(allowedFeatureDimension);
-                }
-            }
+            Data.Load(mreader, ParameterSetting.BATCH_SIZE);
         }
 
-        public bool Fill(int allowedFeatureDimension)
+        public bool Fill()
         {
             if (BATCH_INDEX == BATCH_NUM)
             {
                 return false;
             }
-            LoadDataBatch(allowedFeatureDimension);            
+            LoadDataBatch();
             BATCH_INDEX++;
             return true;
         }
 
         public void Dispose()
-        {            
+        {
             CloseStream();
         }
     }
@@ -182,7 +120,7 @@ namespace DSMlib
         public virtual void Loading_LabelInfo(string[] files)
         { }
 
-        public virtual void Ouput_Batch(float[] score,  float[] groundTrue, int[] args)
+        public virtual void Ouput_Batch(float[] score, float[] groundTrue, int[] args)
         { }
 
         public virtual void Init()
@@ -222,7 +160,7 @@ namespace DSMlib
                 throw new Exception(string.Format("Missing objective metric result file {0}, check your validation evaluation process!", metricEvalResultFile));
             }
             validationFileLines = new List<string>();
-            
+
             StreamReader sr = new StreamReader(metricEvalResultFile);
             string line = sr.ReadLine();    // read the first line only
             float objectiveMetric = 0;
@@ -243,7 +181,7 @@ namespace DSMlib
             string pairScoreFile = Path.GetRandomFileName();
             string objectiveMetricFile = pairScoreFile + ".metric";
             Program.Print("Saving validation prediction scores ... ");
-            
+
             Save(pairScoreFile);
             //PairValidStream.SavePairPredictionScore(pairScoreFile);
 
@@ -275,7 +213,7 @@ namespace DSMlib
             PairScoreEvaluationSet.CallExternalMetricEXE(ParameterSetting.VALIDATE_PROCESS, string.Format("{0} {1} {2}", srcModelPath, tgtModelPath, validationResultFile), validationResultFile);
 
             Program.Print("Reading validation objective metric  ... ");
-            
+
             float result = PairScoreEvaluationSet.ReadExternalObjectiveMetric(validationResultFile, out validationFileLines);
 
             if (File.Exists(validationResultFile))
@@ -352,7 +290,7 @@ namespace DSMlib
         public int Dimension = 0;
         public override void Init()
         {
- 	        PairInfo_Details.Clear();
+            PairInfo_Details.Clear();
             Pair_Score.Clear();
         }
 
@@ -430,7 +368,7 @@ namespace DSMlib
             {
                 float g = PairInfo_Details[i];
                 float p = Pair_Scores[i];
-                mtwriter.WriteLine(g.ToString()+"\t"+p.ToString());
+                mtwriter.WriteLine(g.ToString() + "\t" + p.ToString());
             }
             mtwriter.Close();
         }
@@ -465,7 +403,7 @@ namespace DSMlib
             {
                 StringBuilder sb = new StringBuilder();
                 float v = PairInfo_Details[i];
-                
+
                 sb.Append(v.ToString() + "\t");
                 for (int k = 0; k < Pair_Scores[i].Length; k++)
                 {
@@ -483,7 +421,7 @@ namespace DSMlib
             {
                 StringBuilder sb = new StringBuilder();
                 float[] f = new float[args[1]];
-                
+
                 for (int k = 0; k < args[1]; k++)
                 {
                     f[k] = score[i * args[1] + k];
@@ -500,18 +438,20 @@ namespace DSMlib
 
 
 
-    public class PairInputStream:IDisposable
+    public class PairInputStream : IDisposable
     {
-        public SequenceInputStream qstream = new SequenceInputStream();
-        public SequenceInputStream dstream = new SequenceInputStream();
+        public SequenceInputStream q0stream = new SequenceInputStream();
+        public SequenceInputStream q1stream = new SequenceInputStream();
+        public SequenceInputStream q2stream = new SequenceInputStream();
 
-        public static int MAXSEGMENT_BATCH = 40000;
-        public static int QUERY_MAXSEGMENT_BATCH = 40000;
-        public static int DOC_MAXSEGMENT_BATCH = 40000;
+        //public static int MAXSEGMENT_BATCH = 40000;
+        //public static int QUERY_MAXSEGMENT_BATCH = 40000;
+        //public static int DOC_MAXSEGMENT_BATCH = 40000;
 
         /********How to transform the qbatch, dbatch and negdbatch into GPU Memory**********/
-        public BatchSample_Input GPU_qbatch { get { return qstream.Data; } }
-        public BatchSample_Input GPU_dbatch { get { return dstream.Data; } }
+        public BatchSample_Input GPU_q0batch { get { return q0stream.Data; } }
+        public BatchSample_Input GPU_q1batch { get { return q1stream.Data; } }
+        public BatchSample_Input GPU_q2batch { get { return q2stream.Data; } }
         /*************************************************************************************/
 
         /**************** Associated streams *************/
@@ -547,43 +487,15 @@ namespace DSMlib
 
         #endregion
 
-        public void InitFeatureNorm(Normalizer srcNormalizer, Normalizer tgtNormalizer)
-        {
-            if (srcNormalizer != null)
-            {
-                if (srcNormalizer.Type == NormalizerType.MIN_MAX)
-                {
-                    qstream.Init();
-                    while (qstream.Fill(ParameterSetting.FEATURE_DIMENSION_QUERY))
-                    {
-                        srcNormalizer.AnalysisBatch(qstream.Data);
-                    }
-                    srcNormalizer.AnalysisEnd();
-                }
-            }
-            if (tgtNormalizer != null)
-            {
-                if (tgtNormalizer.Type == NormalizerType.MIN_MAX)
-                {
-                    dstream.Init();
-                    while (dstream.Fill(ParameterSetting.FEATURE_DIMENSION_DOC))
-                    {
-                        tgtNormalizer.AnalysisBatch(dstream.Data);
-                    }
-                    tgtNormalizer.AnalysisEnd();
-                }
-            }
-        }
-
         /// <summary>
         /// Used by valid input
         /// </summary>
         /// <param name="qFileName"></param>
         /// <param name="dFileName"></param>
         /// <param name="pairFileName"></param>
-        public void Load_Validate_PairData(string qFileName, string dFileName, string pairFileName, Evaluation_Type type)
+        public void Load_Validate_PairData(List<string> qFileName, string pairFileName, Evaluation_Type type)
         {
-            Load_PairData(qFileName, dFileName, null);
+            Load_PairData(qFileName, null);
 
             eval = EvaluationSet.Create(type);
 
@@ -595,74 +507,71 @@ namespace DSMlib
         /// <param name="qFileName"></param>
         /// <param name="dFileName"></param>
         /// <param name="nceProbDistFile"></param>
-        public void Load_Train_PairData(string qFileName, string dFileName, string nceProbDistFile = null)
+        public void Load_Train_PairData(List<string> qFileName, string nceProbDistFile = null)
         {
-            Load_PairData(qFileName, dFileName, nceProbDistFile);
+            Load_PairData(qFileName, nceProbDistFile);
 
             //// We only update feature dimension from train stream on the first fresh kickoff
             //// whenever the feature dimensions have been set or load from models, we will skip the update here
-            if (ParameterSetting.FEATURE_DIMENSION_QUERY <= 0 || ParameterSetting.FEATURE_DIMENSION_DOC <= 0)
+            if (ParameterSetting.FEATURE_DEMENSION_Q0 <= 0 || ParameterSetting.FEATURE_DEMENSION_Q1 <= 0 || ParameterSetting.FEATURE_DEMENSION_Q2 <= 0)
             {
-                ParameterSetting.FEATURE_DIMENSION_QUERY = qstream.Feature_Size;
-                ParameterSetting.FEATURE_DIMENSION_DOC = dstream.Feature_Size;
+                ParameterSetting.FEATURE_DEMENSION_Q0 = q0stream.Feature_Size;
+                ParameterSetting.FEATURE_DEMENSION_Q1 = q1stream.Feature_Size;
+                ParameterSetting.FEATURE_DEMENSION_Q2 = q2stream.Feature_Size;
 
                 if (ParameterSetting.MIRROR_INIT)
                 {
-                    int featureDim = Math.Max(ParameterSetting.FEATURE_DIMENSION_QUERY, ParameterSetting.FEATURE_DIMENSION_DOC);
-                    Program.Print(string.Format("Warning! MIRROR_INIT is turned on. Make sure two input sides are on the same feature space, and two models have exactly the same structure. Originally Feature Num Query {0}, Feature Num Doc {1}. Now both aligned to {2}", ParameterSetting.FEATURE_DIMENSION_QUERY, ParameterSetting.FEATURE_DIMENSION_DOC, featureDim));
-                    ParameterSetting.FEATURE_DIMENSION_QUERY = featureDim;
-                    ParameterSetting.FEATURE_DIMENSION_DOC = featureDim;
+                    int featureDim = Math.Max(ParameterSetting.FEATURE_DEMENSION_Q0, ParameterSetting.FEATURE_DEMENSION_Q1);
+                    featureDim = Math.Max(featureDim, ParameterSetting.FEATURE_DEMENSION_Q2);
+
+                    Program.Print(string.Format("Warning! MIRROR_INIT is turned on. Make sure two input sides are on the same feature space, and two models have exactly the same structure. Originally Feature Num Query {0}, Feature Num Doc {1}. Now both aligned to {2}",
+                        ParameterSetting.FEATURE_DEMENSION_Q0, 
+                        ParameterSetting.FEATURE_DEMENSION_Q1, 
+                        ParameterSetting.FEATURE_DEMENSION_Q2, 
+                        featureDim));
+                    ParameterSetting.FEATURE_DEMENSION_Q0 = featureDim;
+                    ParameterSetting.FEATURE_DEMENSION_Q1 = featureDim;
+                    ParameterSetting.FEATURE_DEMENSION_Q2 = featureDim;
                 }
             }
         }
 
-        void Load_PairData(string qFileName, string dFileName, string nceProbDistFile)
+        void Load_PairData(List<string> qFileName, string nceProbDistFile)
         {
             CloseAllStreams();
-            qstream.get_dimension(qFileName);
-            dstream.get_dimension(dFileName);
-            if(nceProbDistFile != null)
+            q0stream.get_dimension(qFileName[0]);
+            q1stream.get_dimension(qFileName[1]);
+            q2stream.get_dimension(qFileName[2]);
+            if (nceProbDistFile != null)
             {
                 this.srNCEProbDist = new StreamReader(nceProbDistFile);
             }
-
-            QUERY_MAXSEGMENT_BATCH = Math.Max(QUERY_MAXSEGMENT_BATCH, qstream.MAXSEQUENCE_PERBATCH);
-            DOC_MAXSEGMENT_BATCH = Math.Max(DOC_MAXSEGMENT_BATCH, dstream.MAXSEQUENCE_PERBATCH);
-            MAXSEGMENT_BATCH = Math.Max(QUERY_MAXSEGMENT_BATCH, DOC_MAXSEGMENT_BATCH);
         }
-        
+
         public void Init_Batch()
         {
-            qstream.Init();
-            dstream.Init();
+            q0stream.Init();
+            q1stream.Init();
+            q2stream.Init();
         }
 
         public bool Next_Batch()
         {
-            return Next_Batch(null, null);
-        }
-
-        public bool Next_Batch(Normalizer srcNorm, Normalizer tgtNorm)
-        {
-            if (!qstream.Fill(ParameterSetting.FEATURE_DIMENSION_QUERY) || !dstream.Fill(ParameterSetting.FEATURE_DIMENSION_DOC))
+            if (!q0stream.Fill() || !q1stream.Fill() || !q2stream.Fill())
             {
                 return false;
             }
-            if(srcNorm != null)
-                srcNorm.ProcessBatch(qstream.Data);
-
-            if(tgtNorm != null)
-                tgtNorm.ProcessBatch(dstream.Data);
-            qstream.Data.Batch_In_GPU();
-            dstream.Data.Batch_In_GPU();
+            q0stream.Data.Batch_In_GPU();
+            q1stream.Data.Batch_In_GPU();
+            q2stream.Data.Batch_In_GPU();
             return true;
         }
 
         public void CloseAllStreams()
         {
-            //// close existing streams if already opened
-            qstream.CloseStream();
-            dstream.CloseStream();
+            q0stream.CloseStream();
+            q1stream.CloseStream();
+            q2stream.CloseStream();
 
             if (this.srNCEProbDist != null)
             {
@@ -673,8 +582,9 @@ namespace DSMlib
 
         public void Dispose()
         {
-            qstream.Dispose();
-            dstream.Dispose();
+            q0stream.Dispose();
+            q1stream.Dispose();
+            q2stream.Dispose();
             CloseAllStreams();
         }
     }
