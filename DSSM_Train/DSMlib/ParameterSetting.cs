@@ -27,6 +27,10 @@ namespace DSMlib
 
     public class ParameterSetting
     {
+
+        // 下面这段是我加的
+        public static int FIXED_FEATURE_DIM = 300;  // 输入词向量的长度
+
         public static bool CuBlasEnable = true;
 
         public static ObjectiveType OBJECTIVE = ObjectiveType.MMI; //0:MMI as in CIKM13, 1:MXE expected error, 2:NCE noise contrstive learning
@@ -55,20 +59,29 @@ namespace DSMlib
 
         public static float BIAS_WEIGHT = 0;
 
-        public static int FEATURE_DIMENSION_QUERY = 0;
-        public static int FEATURE_DIMENSION_DOC = 0;
+        //public static int FEATURE_DIMENSION_QUERY = 0;
+        //public static int FEATURE_DIMENSION_DOC = 0;
+        public static int FEATURE_DEMENSION_Q0 = 0;
+        public static int FEATURE_DEMENSION_Q1 = 0;
+        public static int FEATURE_DEMENSION_Q2 = 0;
 
         public static string SHALLOW_SOURCE = "";
         public static string SHALLOW_TARGET = "";
         public static bool IS_SHALLOW = false;
         public static bool IS_SHAREMODEL = false;
 
+        //public static string QFILE = "";
+        //public static int Q_FEA_NORM = 0;
 
-        public static string QFILE = "";
-        public static int Q_FEA_NORM = 0;
+        //public static string DFILE = "";
+        //public static int D_FEA_NORM = 0;
 
-        public static string DFILE = "";
-        public static int D_FEA_NORM = 0;
+        public static string QFILE_0 = "";
+        public static int Q0_FEA_NORM = 0;
+        public static string QFILE_1 = "";
+        public static int Q1_FEA_NORM = 0;
+        public static string QFILE_2 = "";
+        public static int Q2_FEA_NORM = 0;
 
         public static string LFILE = "";
 
@@ -267,23 +280,33 @@ namespace DSMlib
                     LFILE = cmds[1];
                 }
 
-                if (cmds[0].Equals("QFILE"))
+                if (cmds[0].Equals("Q0FILE"))
                 {
-                    QFILE = cmds[1];
+                    QFILE_0 = cmds[1];
                 }
-                if (cmds[0].Equals("DFILE"))
+                if (cmds[0].Equals("Q1FILE"))
                 {
-                    DFILE = cmds[1];
+                    QFILE_1 = cmds[1];
+                }
+                if (cmds[0].Equals("Q2FILE"))
+                {
+                    QFILE_2 = cmds[1];
                 }
 
-                if (cmds[0].Equals("Q_FEA_NORM"))
+
+                if (cmds[0].Equals("Q1_FEA_NORM"))
                 {
-                    Q_FEA_NORM = int.Parse(cmds[1]);
+                    Q1_FEA_NORM = int.Parse(cmds[1]);
                 }
 
-                if (cmds[0].Equals("D_FEA_NORM"))
+                if (cmds[0].Equals("Q2_FEA_NORm"))
                 {
-                    D_FEA_NORM = int.Parse(cmds[1]);
+                    Q2_FEA_NORM = int.Parse(cmds[1]);
+                }
+
+                if (cmds[0].Equals("Q0_FEA_NORm"))
+                {
+                    Q0_FEA_NORM = int.Parse(cmds[1]);
                 }
 
                 if (cmds[0].Equals("LOGFILE"))
