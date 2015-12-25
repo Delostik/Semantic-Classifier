@@ -187,6 +187,28 @@ namespace DSMlib
             CopyIntoCuda();
         }
 
+        //***** Modified by Ziyu Guan
+        public void Init(string type, int dim_fea)
+        {
+            if (cpuMemArray == null)
+            {
+                throw new Exception("Error! Must set needCpuMem=true for Init() operation!");
+            }
+            Random rand = ParameterSetting.Random;
+            if (type.Equals("lookupt")) // now only for lookup table init
+            {
+                for (int i = 0; i < size; i++)
+                    cpuMemArray[i] = (float)((rand.NextDouble() - 0.5) / dim_fea);
+                CopyIntoCuda();
+            }
+            else
+            {
+                // unrecognized type code
+                Init((float)0.1);
+            }
+        }
+        //***** Modified by Ziyu Guan
+
         /// <summary>
         /// 
         /// </summary>
