@@ -507,7 +507,7 @@ namespace DSMlib
         /// <param name="qFileName"></param>
         /// <param name="dFileName"></param>
         /// <param name="nceProbDistFile"></param>
-        public void Load_Train_PairData(List<string> qFileName, string nceProbDistFile = null)
+        public void Load_Train_TriData(List<string> qFileName, string nceProbDistFile = null)
         {
             Load_PairData(qFileName, nceProbDistFile);
 

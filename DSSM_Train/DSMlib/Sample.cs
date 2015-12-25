@@ -13,25 +13,27 @@ namespace DSMlib
         public int batchsize = ParameterSetting.BATCH_SIZE;
         CudaPieceInt word_Idx;
         CudaPieceInt sample_Idx;
+        CudaPieceInt fea_Idx;
 
-        public int[] Word_Idx_Mem { get { return word_Idx.MemPtr; } }
+        public int[] Fea_Mem { get { return fea_Idx.MemPtr; } }
         public int[] Sample_Mem { get { return sample_Idx.MemPtr; } }
+        public int[] Word_Idx_Mem { get { return word_Idx.MemPtr; } }
 
-        public IntPtr Word_Idx { get { return word_Idx.CudaPtr; } }
+        public IntPtr Fea_Idx { get { return fea_Idx.CudaPtr; } }
         public IntPtr Sample_Idx { get { return sample_Idx.CudaPtr; } }
-
+        public IntPtr Word_Idx { get { return word_Idx.CudaPtr; } }
 
         public BatchSample_Input(int MAX_BATCH_SIZE, int MAXELEMENTS_PERBATCH)
         {
             sample_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
+            fea_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
             word_Idx = new CudaPieceInt(MAXELEMENTS_PERBATCH, true, true);
-            
         }
+
         ~BatchSample_Input()
         {
             Dispose();
         }
-
 
         public void Load(BinaryReader mreader, int batchsize)
         {
@@ -40,9 +42,13 @@ namespace DSMlib
             {
                 Sample_Mem[i] = mreader.ReadInt32();
             }
-
+            for (int i = 0; i < batchsize; i++)
+            {
+                Fea_Mem[i] = mreader.ReadInt32();
+            }
             // update cudaDataPiece sizes
             sample_Idx.Size = batchsize;
+            fea_Idx.Size = batchsize;
             word_Idx.Size = elementSize;
 
             for (int i = 0; i < elementSize; i++)
@@ -54,12 +60,14 @@ namespace DSMlib
         public void Batch_In_GPU()
         {
             sample_Idx.CopyIntoCuda();
+            fea_Idx.CopyIntoCuda();
             word_Idx.CopyIntoCuda();
         }
 
         public void Dispose()
         {
             sample_Idx.Dispose();
+            fea_Idx.Dispose();
             word_Idx.Dispose();
 
         }
