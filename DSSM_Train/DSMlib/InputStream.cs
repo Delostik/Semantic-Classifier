@@ -27,6 +27,8 @@ namespace DSMlib
         public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
         public int BATCH_INDEX = 0;
+        public int LAST_INCOMPLETE_BATCH_SIZE = 0;
+
         FileStream mstream = null;
         BinaryReader mreader = null;
 
@@ -57,12 +59,20 @@ namespace DSMlib
             mreader = new BinaryReader(mstream);
             mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
 
-            nLine = mreader.ReadInt32();
+            nLine = mreader.ReadInt32(); int batch_size = mreader.ReadInt32();
+            if (batch_size != ParameterSetting.BATCH_SIZE)
+            {
+                throw new Exception(string.Format(
+                    "Batch_Size does not match between configuration and input data!\n\tFrom config: {0}.\n\tFrom data ({1}): {2}"
+                    , ParameterSetting.BATCH_SIZE, fileName, batch_size)
+                );
+            }
             maxElementsPerBatch = mreader.ReadInt32();
 
             Data = new BatchSample_Input(ParameterSetting.BATCH_SIZE, maxElementsPerBatch);
 
             BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
+            LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
             BATCH_INDEX = 0;
         }
 
