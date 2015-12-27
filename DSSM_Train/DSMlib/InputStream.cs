@@ -23,7 +23,8 @@ namespace DSMlib
         public BatchSample_Input Data = null;
 
         public int nLine = 0;
-        public int maxElementsPerBatch = 0;
+        //public int maxElementsPerBatch = 0;
+        public int MAXSEGMENT_BATCH = 0;
         public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
         public int BATCH_INDEX = 0;
@@ -67,9 +68,9 @@ namespace DSMlib
                     , ParameterSetting.BATCH_SIZE, fileName, batch_size)
                 );
             }
-            maxElementsPerBatch = mreader.ReadInt32();
+            MAXSEGMENT_BATCH = mreader.ReadInt32();
 
-            Data = new BatchSample_Input(ParameterSetting.BATCH_SIZE, maxElementsPerBatch);
+            Data = new BatchSample_Input(ParameterSetting.BATCH_SIZE, MAXSEGMENT_BATCH);
 
             BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
             LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
@@ -454,7 +455,7 @@ namespace DSMlib
         public SequenceInputStream q1stream = new SequenceInputStream();
         public SequenceInputStream q2stream = new SequenceInputStream();
 
-        //public static int MAXSEGMENT_BATCH = 40000;
+        public static int MAXSEGMENT_BATCH = 40000;
         //public static int QUERY_MAXSEGMENT_BATCH = 40000;
         //public static int DOC_MAXSEGMENT_BATCH = 40000;
 
@@ -556,6 +557,9 @@ namespace DSMlib
             {
                 this.srNCEProbDist = new StreamReader(nceProbDistFile);
             }
+
+            MAXSEGMENT_BATCH = Math.Max(q0stream.MAXSEGMENT_BATCH, q1stream.MAXSEGMENT_BATCH);
+            MAXSEGMENT_BATCH = Math.Max(q2stream.MAXSEGMENT_BATCH, MAXSEGMENT_BATCH);
         }
 
         public void Init_Batch()
