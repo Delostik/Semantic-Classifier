@@ -7,7 +7,7 @@ using System.IO;
 namespace DSMlib
 {
     public enum A_Func { Linear = 0, Tanh = 1, Rectified = 2 };
-    public enum N_Type { Fully_Connected = 0, Convolution_layer = 1 };
+    public enum N_Type { Fully_Connected = 0, Convolution_layer = 1, /*Added by Ziyu Guan*/MultiWidthConv_layer = 2, Composite_Full = 3/*Added by Ziyu Guan*/ };
     public enum P_Pooling {MAX_Pooling = 0 };
     /// <summary>
     /// Model related parameters
@@ -30,6 +30,13 @@ namespace DSMlib
 
         public CudaPieceFloat weight;
         public CudaPieceFloat bias;
+
+        //***** Added by Ziyu Guan
+        public int[] wnd_sizes = { 1, 2, 3 };
+        public int[] num_fms; // number of feature maps for each window size. This array must have the same size as wnd_sizes and the sum of its elements must equal to Neural_Out.Number
+        public int[] ma_sizes;
+        public NeuralLayer Extra_Input; // for extra context input, Nt = Composite_Full
+        //***** Added by Ziyu Guan
 
         public IntPtr Weight { get { return weight.CudaPtr; } }
         public IntPtr Bias { get { return bias.CudaPtr; } }
@@ -58,22 +65,42 @@ namespace DSMlib
             bias.CopyIntoCuda();
         }
 
-
-        public NeuralLink(NeuralLayer layer_in, NeuralLayer layer_out, A_Func af, float hidBias, float weightSigma, N_Type nt, int win_size, bool backupOnly)
+        //***** Modified by Ziyu Guan
+        public NeuralLink(NeuralLayer layer_in, NeuralLayer layer_out, A_Func af, float hidBias, float weightSigma, N_Type nt, int win_size, bool backupOnly, int[] winsizes, int[] fmcounts, NeuralLayer extra)
         {
             Neural_In = layer_in;
             Neural_Out = layer_out;
+            Extra_Input = extra;
             //Neural_In.Number = Neural_In.Number; // *N_Winsize;
             Nt = nt;
             N_Winsize = win_size;
+            wnd_sizes = winsizes;
+            num_fms = fmcounts;
 
             Af = af;
             initHidBias = hidBias;
             initWeightSigma = weightSigma;
-
-            weight = new CudaPieceFloat(Neural_In.Number * Neural_Out.Number * N_Winsize, true, backupOnly ? false : true);
-            bias = new CudaPieceFloat(Neural_Out.Number, true, backupOnly ? false : true);
+            if (Nt == N_Type.MultiWidthConv_layer)
+            {
+                ma_sizes = new int[num_fms.Length];
+                int totalw = 0;
+                for (int i = 0; i < num_fms.Length; i++)
+                {
+                    totalw += Neural_In.Number * wnd_sizes[i] * num_fms[i];
+                    ma_sizes[i] = totalw;
+                }
+                weight = new CudaPieceFloat(totalw, true, backupOnly ? false : true); // for multi-window case, there are multiple matrices stored in the weight variable, each in num_fms[i] X (wnd_sizes[i] * inputDim)
+            }
+            else if (Nt == N_Type.Composite_Full)
+            {
+                weight = new CudaPieceFloat((Neural_In.Number * N_Winsize + Extra_Input.Number) * Neural_Out.Number, true, backupOnly ? false : true); // output * input, output * extra_input
+            }
+            else
+                weight = new CudaPieceFloat(Neural_In.Number * Neural_Out.Number * N_Winsize, true, backupOnly ? false : true);
+            
+            bias = new CudaPieceFloat(Neural_Out.Number, true, backupOnly ? false : true);           
         }
+        //***** Modified by Ziyu Guan
 
         ~NeuralLink()
         {
@@ -87,14 +114,40 @@ namespace DSMlib
             bias.Dispose();            
         }
 
+        //***** Modified by Ziyu Guan
         public void Init()
         {
-            int inputsize = Neural_In.Number * N_Winsize;
-            int outputsize = Neural_Out.Number;
+            if (Nt == N_Type.MultiWidthConv_layer)
+            {
+                float[] initWei = new float[weight.Size];
+                Random random = ParameterSetting.Random;
+                int idx = 0, accu = 0;
+                int insize, outsize;
+                float scale1, bias1;
+                for (int i = 0; i < num_fms.Length; i++)
+                {
+                    insize = Neural_In.Number * wnd_sizes[i];
+                    outsize = num_fms[i];
+                    scale1 = (float)(Math.Sqrt(6.0 / (insize + outsize)) * 2);
+                    bias1 = (float)(-Math.Sqrt(6.0 / (insize + outsize)));
+                    accu += insize * outsize;
+                    for (; idx < accu; idx++)
+                        initWei[idx] = (float)(random.NextDouble() * scale1 + bias1);
+                }
+                weight.Init(initWei);
+            }
+            else
+            {
+                int inputsize = Neural_In.Number * N_Winsize;
+                if (Nt == N_Type.Composite_Full)
+                    inputsize += Extra_Input.Number;
+                int outputsize = Neural_Out.Number;
+                weight.Init((float)(Math.Sqrt(6.0 / (inputsize + outputsize)) * 2), (float)(-Math.Sqrt(6.0 / (inputsize + outputsize))));
+            }
 
-            weight.Init((float)(Math.Sqrt(6.0 / (inputsize + outputsize)) * 2), (float)(-Math.Sqrt(6.0 / (inputsize + outputsize))));
             bias.Init(initHidBias);
         }
+        //***** Modified by Ziyu Guan
 
         public void Init(float wei_scale, float wei_bias)
         {
@@ -110,12 +163,70 @@ namespace DSMlib
     }
 
     /// <summary>
+    /// Lookup tables contain trainable word vectors or product feature context vectors
+    /// </summary>
+    public class LookupTab : IDisposable
+    {
+        public CudaPieceFloat table;
+
+        public int vecDim;
+        public int count;
+
+        public IntPtr LookupTable { get { return table.CudaPtr; } }
+        public float[] Back_LookupTable { get { return table.MemPtr; } }
+
+        unsafe public void CopyOutFromCuda()
+        {
+            table.CopyOutFromCuda();
+        }
+
+        unsafe public void CopyIntoCuda()
+        {
+            table.CopyIntoCuda();
+        }
+
+        public LookupTab(int vecDim, int count, bool backupOnly)
+        {
+            this.vecDim = vecDim;
+            this.count = count;
+            table = new CudaPieceFloat(vecDim * count, true, backupOnly ? false : true);
+        }
+
+        ~LookupTab()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            table.Dispose();
+        }
+
+        public void Init()
+        {
+            table.Init("lookupt", vecDim);
+        }
+
+        public void Init(float wei_scale, float wei_bias)
+        {
+            table.Init(wei_scale, wei_bias);
+        }
+
+        public void Init(LookupTab refTable)
+        {
+            table.Init(refTable.Back_LookupTable);
+        }
+    }
+
+    /// <summary>
     /// Model related parameters and network structure
     /// </summary>
     public class DNN
     {
         public List<NeuralLayer> neurallayers = new List<NeuralLayer>();
         public List<NeuralLink> neurallinks = new List<NeuralLink>();
+
+        public LookupTab wordLT, contextLT;
 
         public DNN(string fileName)
         {
@@ -132,13 +243,33 @@ namespace DSMlib
             get
             {
                 int NUM = 0;
+
+                // Count parameters in lookup tables
+                NUM += wordLT.vecDim * wordLT.count;
+                NUM += contextLT.vecDim * contextLT.count;
+
                 for (int i = 0; i < neurallinks.Count; i++)
                 {
-                    int num = neurallinks[i].Neural_In.Number * neurallinks[i].N_Winsize * neurallinks[i].Neural_Out.Number;
+                    int num = 0;
+                    if (neurallinks[i].Nt == N_Type.Fully_Connected || neurallinks[i].Nt == N_Type.Convolution_layer)
+                    {
+                        num += neurallinks[i].Neural_In.Number * neurallinks[i].N_Winsize * neurallinks[i].Neural_Out.Number;
+                    }
+                    else if (neurallinks[i].Nt == N_Type.MultiWidthConv_layer)
+                    {
+                        for (int j = 0; j < neurallinks[i].num_fms.Length; j++)
+                            num += neurallinks[i].Neural_In.Number * neurallinks[i].wnd_sizes[j] * neurallinks[i].num_fms[j];
+                    }
+                    else // for Composite Full layer
+                    {
+                        num += (neurallinks[i].Neural_In.Number * neurallinks[i].N_Winsize + neurallinks[i].Extra_Input.Number) * neurallinks[i].Neural_Out.Number;
+                    }
+
                     if (ParameterSetting.UpdateBias)
                     {
                         num += neurallinks[i].Neural_Out.Number;
                     }
+
                     NUM += num;
                 }
                 return NUM;
@@ -147,6 +278,8 @@ namespace DSMlib
 
         public void CopyOutFromCuda()
         {
+            wordLT.CopyOutFromCuda();
+            contextLT.CopyOutFromCuda();
             for (int i = 0; i < neurallinks.Count; i++)
             {
                 neurallinks[i].CopyOutFromCuda();
@@ -155,6 +288,8 @@ namespace DSMlib
 
         public void CopyIntoCuda()
         {
+            wordLT.CopyIntoCuda();
+            contextLT.CopyIntoCuda();
             for (int i = 0; i < neurallinks.Count; i++)
             {
                 neurallinks[i].CopyIntoCuda();
@@ -192,18 +327,30 @@ namespace DSMlib
             }
             mwriter.Write(neurallinks.Count);
             for (int i = 0; i < neurallinks.Count; i++)
-            {
-                mwriter.Write(neurallinks[i].Neural_In.Number);
-                mwriter.Write(neurallinks[i].Neural_Out.Number);
-                mwriter.Write(neurallinks[i].initHidBias);
-                mwriter.Write(neurallinks[i].initWeightSigma);
-                mwriter.Write(neurallinks[i].N_Winsize);
+            {              
                 //// compose a Int32 integer whose higher 16 bits store activiation function and lower 16 bits store network type
                 //// In addition, for backward-compatible, neurallinks[i].Af = tanh is stored as 0, neurallinks[i].Af = linear is stored as 1, neurallinks[i].Af = rectified is stored as 2 
                 //// Refer to the Int2A_FuncMapping                
                 int afAndNt = ( A_Func2Int(neurallinks[i].Af) << 16) | ((int) neurallinks[i].Nt );
                 mwriter.Write(afAndNt);
                 mwriter.Write((int)neurallinks[i].pool_type);
+                if (neurallinks[i].Nt == N_Type.MultiWidthConv_layer)
+                {
+                    mwriter.Write(neurallinks[i].num_fms.Length);
+                    for (int j = 0; j < neurallinks[i].num_fms.Length; j++)
+                    {
+                        mwriter.Write(neurallinks[i].num_fms[j]);
+                        mwriter.Write(neurallinks[i].wnd_sizes[j]);
+                    }
+                } else if (neurallinks[i].Nt == N_Type.Composite_Full)
+                {
+                    mwriter.Write(neurallinks[i].Extra_Input.Number);
+                }
+                mwriter.Write(neurallinks[i].Neural_In.Number);
+                mwriter.Write(neurallinks[i].Neural_Out.Number);
+                mwriter.Write(neurallinks[i].initHidBias);
+                mwriter.Write(neurallinks[i].initWeightSigma);
+                mwriter.Write(neurallinks[i].N_Winsize);
             }
 
             for (int i = 0; i < neurallinks.Count; i++)
@@ -220,6 +367,17 @@ namespace DSMlib
                     mwriter.Write(neurallinks[i].Back_Bias[m]);
                 }
             }
+
+            //finally write Lookup table
+            mwriter.Write(wordLT.vecDim);
+            mwriter.Write(wordLT.count);
+            for (int m = 0; m < wordLT.Back_LookupTable.Length; m++)
+                mwriter.Write(wordLT.Back_LookupTable[m]);
+
+            mwriter.Write(contextLT.vecDim);
+            mwriter.Write(contextLT.count);
+            for (int m = 0; m < contextLT.Back_LookupTable.Length; m++)
+                mwriter.Write(contextLT.Back_LookupTable[m]);
 
             mwriter.Close();
             mstream.Close();
@@ -241,9 +399,10 @@ namespace DSMlib
             {
                 layer_info.Add(mreader.ReadInt32());
             }
-            for (int i = 0; i < layer_info.Count; i++)
+            if (allocateStructureFromEmpty)
             {
-                if (allocateStructureFromEmpty)
+                neurallayers.Clear();
+                for (int i = 0; i < layer_info.Count; i++)
                 {
                     NeuralLayer layer = new NeuralLayer(layer_info[i]);
                     neurallayers.Add(layer);
@@ -251,40 +410,44 @@ namespace DSMlib
             }
 
             int mlink_num = mreader.ReadInt32();
+            if (allocateStructureFromEmpty)
+                neurallinks.Clear();
             for (int i = 0; i < mlink_num; i++)
             {
+                int afAndNt = mreader.ReadInt32();
+                A_Func aF = Int2A_Func(afAndNt >> 16);
+                N_Type mnt = (N_Type)(afAndNt & ((1 << 16) - 1));
+                P_Pooling mp = (P_Pooling)mreader.ReadInt32();
+                int[] wnds = null, fms = null;
+                int numofWnd;
+                NeuralLayer extraLayer = null;
+                if (mnt == N_Type.MultiWidthConv_layer)
+                {
+                    numofWnd = mreader.ReadInt32();
+                    wnds = new int[numofWnd];
+                    fms = new int[numofWnd];
+                    for (int jj = 0; jj < fms.Length; jj++)
+                    {
+                        fms[jj] = mreader.ReadInt32();
+                        wnds[jj] = mreader.ReadInt32();
+                    }
+                }
+                else if (mnt == N_Type.Composite_Full)
+                {
+                    extraLayer = new NeuralLayer(mreader.ReadInt32());
+                }
+
                 int in_num = mreader.ReadInt32();
                 int out_num = mreader.ReadInt32();
                 float inithidbias = mreader.ReadSingle();
                 float initweightsigma = mreader.ReadSingle();
+                int mws = mreader.ReadInt32();
 
-                NeuralLink link = null;
-                if (ParameterSetting.LoadModelOldFormat)
-                {
-                    if (allocateStructureFromEmpty)
-                    {
-                        // for back-compatibility only. The old model format donot have those three fields
-                        link = new NeuralLink(neurallayers[i], neurallayers[i + 1], A_Func.Tanh, 0, initweightsigma, N_Type.Fully_Connected, 1, false);
-                    }
-                }
-                else
-                {
-                    // this is the eventually favorable loading format
-                    int mws = mreader.ReadInt32();
-                    //// decompose a Int32 integer, whose higher 16 bits store activiation function and lower 16 bits store network type
-                    //// In addition, for backward-compatible, neurallinks[i].Af = tanh is stored as 0, neurallinks[i].Af = linear is stored as 1, neurallinks[i].Af = rectified is stored as 2 
-                    //// Refer to the Int2A_FuncMapping                
-                    int afAndNt = mreader.ReadInt32();
-                    A_Func aF = Int2A_Func(afAndNt >> 16);
-                    N_Type mnt = (N_Type) (afAndNt & ((1<<16)-1));
-                    P_Pooling mp = (P_Pooling)mreader.ReadInt32();
-                    if (allocateStructureFromEmpty)
-                    {
-                        link = new NeuralLink(neurallayers[i], neurallayers[i + 1], aF, 0, initweightsigma, mnt, mws, false);
-                    }
-                }
+                //if (ParameterSetting.LoadModelOldFormat) delete this option
+
                 if (allocateStructureFromEmpty)
                 {
+                    NeuralLink link = new NeuralLink(neurallayers[i], neurallayers[i + 1], aF, 0, initweightsigma, mnt, mws, false, wnds, fms, extraLayer);
                     neurallinks.Add(link);
                 }
             }
@@ -294,7 +457,7 @@ namespace DSMlib
                 int weight_len = mreader.ReadInt32(); // Write(neurallinks[i].Back_Weight.Length);
                 if (weight_len != neurallinks[i].Back_Weight.Length)
                 {
-                    Console.WriteLine("Loading Model Weight Error!  " + weight_len.ToString() + " " + neurallinks[i].Back_Weight.Length.ToString());
+                    Console.WriteLine("Loading Model Weight Error on layer" + i.ToString() +"!  " + weight_len.ToString() + " " + neurallinks[i].Back_Weight.Length.ToString());
                     Console.ReadLine();
                 }
                 for (int m = 0; m < weight_len; m++)
@@ -304,7 +467,7 @@ namespace DSMlib
                 int bias_len = mreader.ReadInt32();
                 if (bias_len != neurallinks[i].Back_Bias.Length)
                 {
-                    Console.WriteLine("Loading Model Bias Error!  " + bias_len.ToString() + " " + neurallinks[i].Back_Bias.Length.ToString());
+                    Console.WriteLine("Loading Model Bias Error on layer" + i.ToString() + "!  " + bias_len.ToString() + " " + neurallinks[i].Back_Bias.Length.ToString());
                     Console.ReadLine();
                 }
                 for (int m = 0; m < bias_len; m++)
@@ -312,85 +475,114 @@ namespace DSMlib
                     neurallinks[i].Back_Bias[m] = mreader.ReadSingle();
                 }
             }
+
+            //load lookup tables
+            Console.WriteLine("Loading lookup tables...");
+            int wordVeclen = mreader.ReadInt32();
+            int wordCount = mreader.ReadInt32();
+            if (allocateStructureFromEmpty)
+                wordLT = new LookupTab(wordVeclen, wordCount, false);
+            int ltlength = wordVeclen * wordCount;
+            if (ltlength != wordLT.Back_LookupTable.Length)
+            {
+                Console.WriteLine("Loading Word Lookup Table Error!  " + ltlength.ToString() + " " + wordLT.Back_LookupTable.Length.ToString());
+                Console.ReadLine();
+            }
+            for (int mm = 0; mm < ltlength; mm++)
+                wordLT.Back_LookupTable[mm] = mreader.ReadSingle();
+
+            int contextVeclen = mreader.ReadInt32();
+            int contextCount = mreader.ReadInt32();
+            if (allocateStructureFromEmpty)
+                contextLT = new LookupTab(contextVeclen, contextCount, false);
+            ltlength = contextCount * contextVeclen;
+            if (ltlength != contextLT.Back_LookupTable.Length)
+            {
+                Console.WriteLine("Loading Context Lookup Table Error!  " + ltlength.ToString() + " " + contextLT.Back_LookupTable.Length.ToString());
+                Console.ReadLine();
+            }
+            for (int mm = 0; mm < ltlength; mm++)
+                contextLT.Back_LookupTable[mm] = mreader.ReadSingle();
+
             mreader.Close();
             mstream.Close();
             CopyIntoCuda();
         }
 
-        public void Fill_Layer_One(string fileName)
-        {
-            FileStream mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-            BinaryReader mreader = new BinaryReader(mstream);
+        //public void Fill_Layer_One(string fileName)
+        //{
+        //    FileStream mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+        //    BinaryReader mreader = new BinaryReader(mstream);
 
-            List<int> layer_info = new List<int>();
-            int mlayer_num = mreader.ReadInt32();
-            for (int i = 0; i < mlayer_num; i++)
-            {
-                layer_info.Add(mreader.ReadInt32());
-            }
+        //    List<int> layer_info = new List<int>();
+        //    int mlayer_num = mreader.ReadInt32();
+        //    for (int i = 0; i < mlayer_num; i++)
+        //    {
+        //        layer_info.Add(mreader.ReadInt32());
+        //    }
 
-            //for (int i = 0; i < layer_info.Count; i++)
-            //{
-            //    NeuralLayer layer = new NeuralLayer(layer_info[i]);
-            //    neurallayers.Add(layer);
-            //}
+        //    //for (int i = 0; i < layer_info.Count; i++)
+        //    //{
+        //    //    NeuralLayer layer = new NeuralLayer(layer_info[i]);
+        //    //    neurallayers.Add(layer);
+        //    //}
 
-            int mlink_num = mreader.ReadInt32();
-            for (int i = 0; i < mlink_num; i++)
-            {
-                int in_num = mreader.ReadInt32();
-                int out_num = mreader.ReadInt32();
-                float inithidbias = mreader.ReadSingle();
-                float initweightsigma = mreader.ReadSingle();
-                int mws = mreader.ReadInt32();
-                N_Type mnt = (N_Type)mreader.ReadInt32();
-                P_Pooling mp = (P_Pooling)mreader.ReadInt32();
+        //    int mlink_num = mreader.ReadInt32();
+        //    for (int i = 0; i < mlink_num; i++)
+        //    {
+        //        int in_num = mreader.ReadInt32();
+        //        int out_num = mreader.ReadInt32();
+        //        float inithidbias = mreader.ReadSingle();
+        //        float initweightsigma = mreader.ReadSingle();
+        //        int mws = mreader.ReadInt32();
+        //        N_Type mnt = (N_Type)mreader.ReadInt32();
+        //        P_Pooling mp = (P_Pooling)mreader.ReadInt32();
 
-                //NeuralLink link = new NeuralLink(neurallayers[i], neurallayers[i + 1], A_Func.Tanh, 0, initweightsigma,mnt,mws);
-                //neurallinks.Add(link);
-            }
+        //        //NeuralLink link = new NeuralLink(neurallayers[i], neurallayers[i + 1], A_Func.Tanh, 0, initweightsigma,mnt,mws);
+        //        //neurallinks.Add(link);
+        //    }
 
-            for (int i = 0; i < mlink_num; i++)
-            {
-                int weight_len = mreader.ReadInt32(); // Write(neurallinks[i].Back_Weight.Length);
-                if (weight_len != neurallinks[i].Back_Weight.Length)
-                {
-                    Console.WriteLine("Loading Model Weight Error!  " + weight_len.ToString() + " " + neurallinks[i].Back_Weight.Length.ToString());
-                    Console.ReadLine();
-                }
-                for (int m = 0; m < weight_len; m++)
-                {
-                    neurallinks[i].Back_Weight[m] = mreader.ReadSingle();
-                }
-                int bias_len = mreader.ReadInt32();
-                if (bias_len != neurallinks[i].Back_Bias.Length)
-                {
-                    Console.WriteLine("Loading Model Bias Error!  " + bias_len.ToString() + " " + neurallinks[i].Back_Bias.Length.ToString());
-                    Console.ReadLine();
-                }
-                for (int m = 0; m < bias_len; m++)
-                {
-                    neurallinks[i].Back_Bias[m] = mreader.ReadSingle();
-                }
-            }
-            mreader.Close();
-            mstream.Close();
+        //    for (int i = 0; i < mlink_num; i++)
+        //    {
+        //        int weight_len = mreader.ReadInt32(); // Write(neurallinks[i].Back_Weight.Length);
+        //        if (weight_len != neurallinks[i].Back_Weight.Length)
+        //        {
+        //            Console.WriteLine("Loading Model Weight Error!  " + weight_len.ToString() + " " + neurallinks[i].Back_Weight.Length.ToString());
+        //            Console.ReadLine();
+        //        }
+        //        for (int m = 0; m < weight_len; m++)
+        //        {
+        //            neurallinks[i].Back_Weight[m] = mreader.ReadSingle();
+        //        }
+        //        int bias_len = mreader.ReadInt32();
+        //        if (bias_len != neurallinks[i].Back_Bias.Length)
+        //        {
+        //            Console.WriteLine("Loading Model Bias Error!  " + bias_len.ToString() + " " + neurallinks[i].Back_Bias.Length.ToString());
+        //            Console.ReadLine();
+        //        }
+        //        for (int m = 0; m < bias_len; m++)
+        //        {
+        //            neurallinks[i].Back_Bias[m] = mreader.ReadSingle();
+        //        }
+        //    }
+        //    mreader.Close();
+        //    mstream.Close();
 
-            for (int i = 1; i < neurallinks.Count; i++)
-            {
-                for (int m = 0; m < neurallinks[i].Back_Bias.Length; m++)
-                {
-                    neurallinks[i].Back_Bias[m] = 0;
-                }
-                int wei_num = neurallinks[i].Back_Weight.Length;
-                for (int m = 0; m < neurallinks[i].Neural_Out.Number; m++)
-                {
-                    neurallinks[i].Back_Weight[(m * neurallinks[i].Neural_Out.Number) % wei_num + m] = 1.0f;
-                }
-            }
+        //    for (int i = 1; i < neurallinks.Count; i++)
+        //    {
+        //        for (int m = 0; m < neurallinks[i].Back_Bias.Length; m++)
+        //        {
+        //            neurallinks[i].Back_Bias[m] = 0;
+        //        }
+        //        int wei_num = neurallinks[i].Back_Weight.Length;
+        //        for (int m = 0; m < neurallinks[i].Neural_Out.Number; m++)
+        //        {
+        //            neurallinks[i].Back_Weight[(m * neurallinks[i].Neural_Out.Number) % wei_num + m] = 1.0f;
+        //        }
+        //    }
 
-            CopyIntoCuda();
-        }
+        //    CopyIntoCuda();
+        //}
 
         public string DNN_Descr()
         {
@@ -403,16 +595,53 @@ namespace DSMlib
             for (int i = 0; i < neurallinks.Count; i++)
             {
                 result += "layer " + i.ToString() + " to layer " + (i + 1).ToString() + ":" +
+                        " Neural Type : " + neurallinks[i].Nt.ToString() + ";" +
                         " AF Type : " + neurallinks[i].Af.ToString() + ";" +
                         " hid bias : " + neurallinks[i].initHidBias.ToString() + ";" +
-                        " weight sigma : " + neurallinks[i].initWeightSigma.ToString() + ";" +
-                        " Neural Type : " + neurallinks[i].Nt.ToString() + ";" +
-                        " Window Size : " + neurallinks[i].N_Winsize.ToString() + ";" + "\n";
+                        " weight sigma : " + neurallinks[i].initWeightSigma.ToString() + ";";
+                if (neurallinks[i].Nt == N_Type.MultiWidthConv_layer)
+                {
+                    string temp1 = "", temp2 = "";
+                    for (int j = 0; j < neurallinks[i].wnd_sizes.Length; j++)
+                    {
+                        if (j == 0)
+                        {
+                            temp1 += "(" + neurallinks[i].wnd_sizes[j].ToString();
+                            temp2 += "(" + neurallinks[i].num_fms[j].ToString();
+                        }
+                        else if(j == neurallinks[i].wnd_sizes.Length-1)
+                        {
+                            temp1 += ", " + neurallinks[i].wnd_sizes[j].ToString() + ")";
+                            temp2 += ", " + neurallinks[i].num_fms[j].ToString() + ")";
+                        }
+                        else
+                        {
+                            temp1 += ", " + neurallinks[i].wnd_sizes[j].ToString();
+                            temp2 += ", " + neurallinks[i].num_fms[j].ToString();
+                        }
+                    }
+                    result += " Window Sizes : " + temp1 + ";" + " Feature Map Sizes : " + temp2 + ";";
+                    result += " Pooling Type : " + neurallinks[i].pool_type.ToString() + ";" + "\n";
+                }
+                else if (neurallinks[i].Nt == N_Type.Convolution_layer)
+                {
+                    result += " Window Size : " + neurallinks[i].N_Winsize.ToString() + ";";
+                    result += " Pooling Type : " + neurallinks[i].pool_type.ToString() + ";" + "\n";
+                }
+                else if (neurallinks[i].Nt == N_Type.Composite_Full)
+                {
+                    result += " Context Input Size : " + neurallinks[i].Extra_Input.Number.ToString() + ";" + "\n";
+                }                        
             }
+
+            //For lookup tables
+            result += "Word Lookup Table Size : " + wordLT.vecDim + " X " + wordLT.count + "\n";
+            result += "Context Lookup Table Size : " + contextLT.vecDim + " X " + contextLT.count + "\n";
+
             return result;
         }
 
-        public DNN(int featureSize, int[] layerDim, int[] activation, float[] sigma, int[] arch, int[] wind, bool backupOnly)
+        public DNN(int featureSize, int[] layerDim, int[] activation, float[] sigma, int[] arch, int[] wind, int contextSize, int wordNum, int contextNum, int[] wndN, int[] fmN, bool backupOnly)
         {
             NeuralLayer inputlayer = new NeuralLayer(featureSize);
             neurallayers.Add(inputlayer);
@@ -424,10 +653,25 @@ namespace DSMlib
 
             for (int i = 0; i < layerDim.Length; i++)
             {
-                NeuralLink link = new NeuralLink(neurallayers[i], neurallayers[i + 1], (A_Func)activation[i], 0, sigma[i],
-                (N_Type)arch[i], wind[i], backupOnly);
+                NeuralLink link = null;
+                N_Type tp = (N_Type)arch[i];
+                if (tp == N_Type.MultiWidthConv_layer)
+                {
+                    link = new NeuralLink(neurallayers[i], neurallayers[i + 1], (A_Func)activation[i], 0, sigma[i], tp, 0, backupOnly, wndN, fmN, null);
+                }
+                else if (tp == N_Type.Composite_Full)
+                {
+                    NeuralLayer extrain = new NeuralLayer(contextSize);
+                    link = new NeuralLink(neurallayers[i], neurallayers[i + 1], (A_Func)activation[i], 0, sigma[i], tp, wind[i], backupOnly, null, null, extrain);
+                }
+                else
+                    link = new NeuralLink(neurallayers[i], neurallayers[i + 1], (A_Func)activation[i], 0, sigma[i], tp, wind[i], backupOnly, null, null, null);
                 neurallinks.Add(link);
             }
+
+            // Construct LT
+            wordLT = new LookupTab(featureSize, wordNum, backupOnly);
+            contextLT = new LookupTab(contextSize, contextNum, backupOnly);
         }
         
         public void Init()
@@ -436,6 +680,8 @@ namespace DSMlib
             {
                 neurallinks[i].Init();
             }
+            wordLT.Init();
+            contextLT.Init();
         }
 
         public void Init(DNN model)
@@ -444,6 +690,8 @@ namespace DSMlib
             {
                 neurallinks[i].Init(model.neurallinks[i]);
             }
+            wordLT.Init(model.wordLT);
+            contextLT.Init(model.contextLT);
         }
 
         public void Init(float wei_scale, float wei_bias)
@@ -452,6 +700,8 @@ namespace DSMlib
             {
                 neurallinks[i].Init(wei_scale, wei_bias);
             }
+            wordLT.Init(wei_scale, wei_bias);
+            contextLT.Init(wei_scale, wei_bias);
         }
 
         /// <summary>
@@ -461,6 +711,7 @@ namespace DSMlib
         /// <returns></returns>
         public DNN CreateBackupClone()
         {
+            // Assumen the first link layer is the multi-convolutional layer
             DNN backupClone = new DNN(
                 this.neurallayers[0].Number,
                 this.neurallinks.Select(o => o.Neural_Out.Number).ToArray(),
@@ -468,10 +719,70 @@ namespace DSMlib
                 this.neurallinks.Select(o => o.initWeightSigma).ToArray(),
                 this.neurallinks.Select(o => (int)o.Nt).ToArray(),
                 this.neurallinks.Select(o => o.N_Winsize).ToArray(),
+                this.contextLT.vecDim,
+                this.wordLT.count,
+                this.contextLT.count,
+                this.neurallinks[0].wnd_sizes,
+                this.neurallinks[0].num_fms,
                 true);
             backupClone.Init(this);
             return backupClone;
         }
+    }
+
+    public class LookupTabRunData : IDisposable
+    {
+        LookupTab table;
+        public int Dim { get { return table.vecDim; } }
+        public int Count { get { return table.count; } }
+        bool isWordInput; // if wordInput, use MAXSEGMENT_BATCH to construct InputDeriv
+
+        CudaPieceFloat[] inputDerivs;
+        CudaPieceFloat tabUpdate;
+
+        public CudaPieceFloat[] InputDeriv { get { return inputDerivs; } }
+        public CudaPieceFloat TabUpdate { get { return tabUpdate; } }
+
+        public LookupTabRunData(LookupTab table, bool isWordInput)
+        {
+            this.table = table;
+            this.isWordInput = isWordInput;
+            
+            inputDerivs = new CudaPieceFloat[3];
+            tabUpdate = new CudaPieceFloat(Dim * Count, false, true);
+            if (isWordInput)
+            {
+                for (int i = 0; i < inputDerivs.Length; i++)
+                    inputDerivs[i] = new CudaPieceFloat(Dim * ParameterSetting.MAXSEGMENT_BATCH, false, true);
+            }
+            else
+            {
+                for (int i = 0; i < inputDerivs.Length; i++)
+                    inputDerivs[i] = new CudaPieceFloat(Dim * ParameterSetting.BATCH_SIZE, false, true);
+            }
+            
+        }
+
+        ~LookupTabRunData()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (inputDerivs != null)
+            {
+                foreach (CudaPieceFloat i in inputDerivs)
+                    i.Dispose();
+                inputDerivs = null;
+            }
+            if (tabUpdate != null)
+            {
+                tabUpdate.Dispose();
+                tabUpdate = null;
+            }
+        }
+
     }
 
     /// <summary>
@@ -490,27 +801,32 @@ namespace DSMlib
             LayerModel = layerModel;
             if (isValueNeeded)
             {
-                output = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
-                errorDeriv = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
+                outputs = new CudaPieceFloat[3];
+                errorDerivs = new CudaPieceFloat[3];
+                for (int i = 0; i < outputs.Length; i++)
+                {
+                    outputs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
+                    errorDerivs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
+                }
             }
         }
         /// <summary>
         /// The output of the layer, i.e., the actual activitation values
         /// </summary>
-        CudaPieceFloat output = null;
+        CudaPieceFloat[] outputs = null;
 
-        public CudaPieceFloat Output
+        public CudaPieceFloat[] Outputs
         {
-            get { return output; }
+            get { return outputs; }
         }
         /// <summary>
         /// The error of the layer, back-propagated from the top loss function
         /// </summary>
-        CudaPieceFloat errorDeriv = null;
+        CudaPieceFloat[] errorDerivs = null;
 
-        public CudaPieceFloat ErrorDeriv
+        public CudaPieceFloat[] ErrorDerivs
         {
-            get { return errorDeriv; }
+            get { return errorDerivs; }
         }
 
         ~NeuralLayerData()
@@ -520,13 +836,17 @@ namespace DSMlib
 
         public void Dispose()
         {
-            if (output != null)
+            if (outputs != null)
             {
-                output.Dispose();
+                foreach (CudaPieceFloat e in outputs)
+                    e.Dispose();
+                outputs = null;
             }
-            if (errorDeriv != null)
+            if (errorDerivs != null)
             {
-                errorDeriv.Dispose();
+                foreach (CudaPieceFloat e in errorDerivs)
+                    e.Dispose();
+                errorDerivs = null;
             }
         }
     }
@@ -545,20 +865,20 @@ namespace DSMlib
         /// <summary>
         /// Used if convolutional
         /// </summary>
-        CudaPieceFloat layerPoolingOutput = null;
+        CudaPieceFloat[] layerPoolingOutputs = null;
 
-        public CudaPieceFloat LayerPoolingOutput
+        public CudaPieceFloat[] LayerPoolingOutputs
         {
-            get { return layerPoolingOutput; }
+            get { return layerPoolingOutputs; }
         }
         /// <summary>
         /// Used if convolutional and maxpooling
         /// </summary>
-        CudaPieceInt layerMaxPooling_Index = null;
+        CudaPieceInt[] layerMaxPooling_Indices = null;
 
-        public CudaPieceInt LayerMaxPooling_Index
+        public CudaPieceInt[] LayerMaxPooling_Indices
         {
-            get { return layerMaxPooling_Index; }
+            get { return layerMaxPooling_Indices; }
         }
 
         CudaPieceFloat weightDeriv = null;
@@ -595,17 +915,35 @@ namespace DSMlib
         {
             neuralLinkModel = neuralLink;
             
-            if (neuralLinkModel.Nt == N_Type.Convolution_layer)
+            if (neuralLinkModel.Nt == N_Type.Convolution_layer || neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
             {
-                layerPoolingOutput = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, false, true);
-
-                layerMaxPooling_Index = new CudaPieceInt(ParameterSetting.BATCH_SIZE * neuralLinkModel.Neural_Out.Number, false, true);
+                layerPoolingOutputs = new CudaPieceFloat[3];
+                layerMaxPooling_Indices = new CudaPieceInt[3];
+                for (int i = 0; i < 3; i++)
+                {
+                    // for multi-window case, we still allocate the same size of space, but pooling output stores three matrices, each of size (seg_size - batchsize*(win_size-1))* fm_size
+                    layerPoolingOutputs[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, false, true);
+                    layerMaxPooling_Indices[i] = new CudaPieceInt(ParameterSetting.BATCH_SIZE * neuralLinkModel.Neural_Out.Number, false, true);
+                }                 
             }
 
-            weightDeriv = new CudaPieceFloat(neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize, false, true);
+            int totalweightsize = 0;
+            if (neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
+            {
+                for (int i = 0; i < neuralLinkModel.wnd_sizes.Length; i++)
+                    totalweightsize += neuralLinkModel.Neural_In.Number * neuralLinkModel.wnd_sizes[i] * neuralLinkModel.num_fms[i];
+            }
+            else if (neuralLinkModel.Nt == N_Type.Composite_Full)
+            {
+                totalweightsize = neuralLinkModel.Neural_Out.Number * (neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number);
+            }
+            else
+                totalweightsize = neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize;
+
+            weightDeriv = new CudaPieceFloat(totalweightsize, false, true);
             biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
 
-            weightUpdate = new CudaPieceFloat(neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize, false, true);
+            weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
             biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
         }
 
@@ -617,13 +955,17 @@ namespace DSMlib
 
         public void Dispose()
         {
-            if (layerPoolingOutput != null)
+            if (layerPoolingOutputs != null)
             {
-                layerPoolingOutput.Dispose();
+                foreach (CudaPieceFloat e in layerPoolingOutputs)
+                    e.Dispose();
+                layerPoolingOutputs = null;
             }
-            if (layerMaxPooling_Index != null)
+            if (layerMaxPooling_Indices != null)
             {
-                layerMaxPooling_Index.Dispose();
+                foreach (CudaPieceInt e in layerMaxPooling_Indices)
+                    e.Dispose();
+                layerMaxPooling_Indices = null;
             }
             if (weightDeriv != null)
             {
@@ -658,6 +1000,7 @@ namespace DSMlib
         public DNN DnnModel = null;
         public List<NeuralLayerData> neurallayers = new List<NeuralLayerData>();
         public List<NeuralLinkData> neurallinks = new List<NeuralLinkData>();
+        public LookupTabRunData wordLT, contextLT;
 
         public DNNRun(DNN model)
         {
@@ -671,6 +1014,9 @@ namespace DSMlib
             {
                 neurallinks.Add(new NeuralLinkData(DnnModel.neurallinks[i]));
             }
+            //construct run data for lookup tables
+            wordLT = new LookupTabRunData(model.wordLT, true);
+            contextLT = new LookupTabRunData(model.contextLT, false);
         }
 
         public int OutputLayerSize
