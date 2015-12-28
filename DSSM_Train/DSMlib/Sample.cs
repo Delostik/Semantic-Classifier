@@ -60,7 +60,7 @@ namespace DSMlib
             for (int i = 0; i < elementSize; i++)
             {
                 Word_Idx_Mem[i] = mreader.ReadInt32();
-                while (Sample_Mem[smp_index] < i)
+                while (Sample_Mem[smp_index] <= i)
                 {
                     smp_index++;
                 }
