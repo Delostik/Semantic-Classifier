@@ -14,15 +14,8 @@ namespace DSMlib
     }
     public enum ObjectiveType
     {
-        MMI,
-        MXE,
-        NCE,
-        NCE2,
-        PAIRRANK,
-        MULTIREGRESSION,
-        PAIRCLASSIFICATION,
-        PAIRREGRESSION_MSE,
-        PAIRREGRESSION_LR
+        WEAKRANK,
+        SOFTMAX
     }
 
     public class ParameterSetting
@@ -33,30 +26,27 @@ namespace DSMlib
 
         public static bool CuBlasEnable = true;
 
-        public static ObjectiveType OBJECTIVE = ObjectiveType.MMI; //0:MMI as in CIKM13, 1:MXE expected error, 2:NCE noise contrstive learning
-        public static string NCE_PROB_FILE = "_null_"; //if NCE and probFile="_null_" then use uniform Prob(D), e.g., Prob(D) = 1/|D|
+        public static ObjectiveType OBJECTIVE = ObjectiveType.WEAKRANK; //0:weak supervison training; 1:classic supervised training
+        //public static string NCE_PROB_FILE = "_null_"; //if NCE and probFile="_null_" then use uniform Prob(D), e.g., Prob(D) = 1/|D|
         public static int LOSS_REPORT = 1; //report loss 
         public static string reserved_settings = ""; //no use yet
         
         public static int BATCH_SIZE = 1024;
-        public static int NTRIAL = 4;
-        public static float PARM_GAMMA = 10;
+        //public static int NTRIAL = 4;
+        //public static float PARM_GAMMA = 10;
+        public static float PARM_MARGIN = 1;
         public static int MAX_ITER = 40;
 
-        public static int[] SOURCE_LAYER_DIM = { 300, 300, 128 };
-        public static float[] SOURCE_LAYERWEIGHT_SIGMA = { 0.2f, 0.6f, 0.6f };
-        public static int[] SOURCE_ACTIVATION = { 1, 1, 1 };
-        public static int[] SOURCE_ARCH = { 0, 0, 0 };
-        public static int[] SOURCE_ARCH_WIND = { 1, 1, 1 };
-        
+        public static int[] LAYER_DIM = { 300, 300, 128 };
+        public static float[] LAYERWEIGHT_SIGMA = { 0.2f, 0.6f, 0.6f };
+        public static int[] ACTIVATION = { 1, 1, 1 };
+        public static int[] ARCH = { 0, 0, 0 };
+        public static int[] ARCH_WND = { 1, 1, 1 };
 
-        public static int[] TARGET_LAYER_DIM = { 300, 300, 128 };
-        public static float[] TARGET_LAYERWEIGHT_SIGMA = { 0.2f, 0.6f, 0.6f };
-        public static int[] TARGET_ACTIVATION = { 1, 1, 1 };
-        public static int[] TARGET_ARCH = { 0, 0, 0 };
-        public static int[] TARGET_ARCH_WIND = { 1, 1, 1 };
-        
+        public static int[] ARCH_WNDS = { 1, 2, 3 };
+        public static int[] ARCH_FMS = { 200, 200, 200 };
 
+        public static int CONTEXT_DIM = 50;
         public static float BIAS_WEIGHT = 0;
 
         //public static int FEATURE_DIMENSION_QUERY = 0;
@@ -88,9 +78,7 @@ namespace DSMlib
         public static string LFILE = "";
 
         public static bool ISVALIDATE = false;
-        public static string VALIDATE_QFILE = "";
-        public static string VALIDATE_DFILE = "";
-        public static string VALIDATE_QDPAIR = "";
+        public static string VALIDATE_FILE = "";
         public static string VALIDATE_PROCESS = "";
         /// <summary>
         /// If true, then VALIDATE_PROCESS only need MODEL to valid. Don't need VALIDATE_QFILE, VALIDATE_DFILE, and VALIDATE_QDPAIR anymore
@@ -105,7 +93,6 @@ namespace DSMlib
         public static string SEEDMODEL4 = "";
         public static bool NOTrain = false;
 
-        public static bool MIRROR_INIT = false;
         public static int device = 0;
 
         public static MathLibType MATH_LIB = MathLibType.gpu;
@@ -132,9 +119,9 @@ namespace DSMlib
         /// set to be true to load feature values as int32
         /// by default it is false, meaning loading feature value as single float. 
         /// </summary>
-        public static bool FeatureValueAsInt = false;
+        //public static bool FeatureValueAsInt = false;
 
-        public static int Linear_Mapping = 0;
+        //public static int Linear_Mapping = 0;
 
         /// <summary>
         /// 
@@ -155,63 +142,29 @@ namespace DSMlib
 
                 if (cmds[0].Equals("OBJECTIVE"))
                 {
-                    if (cmds[1].Trim().ToUpper() == "MMI")
+                    if (cmds[1].Trim().ToUpper() == "WEAKRANK")
                     {
-                        OBJECTIVE = ObjectiveType.MMI;
+                        OBJECTIVE = ObjectiveType.WEAKRANK;
                     }
-                    else if (cmds[1].Trim().ToUpper() == "MXE")
+                    else if (cmds[1].Trim().ToUpper() == "SOFTMAX")
                     {
-                        OBJECTIVE = ObjectiveType.MXE;
-                    }
-                    else if (cmds[1].Trim().ToUpper() == "NCE")
-                    {
-                        OBJECTIVE = ObjectiveType.NCE;
-                    }
-                    else if (cmds[1].Trim().ToUpper() == "NCE2")
-                    {
-                        OBJECTIVE = ObjectiveType.NCE2;
-                    }
-                    else if (cmds[1].Trim().ToUpper().Equals("PAIRRANK"))
-                    {
-                        OBJECTIVE = ObjectiveType.PAIRRANK;
-                    }
-                    else if (cmds[1].Trim().ToUpper().Equals("MULTIREGRESSION"))
-                    {
-                        OBJECTIVE = ObjectiveType.MULTIREGRESSION;
-                        IS_SHAREMODEL = true;
-                        MIRROR_INIT = false;
-                    }
-                    else if (cmds[1].Trim().ToUpper().Equals("PAIRCLASSIFICATION"))
-                    {
-                        OBJECTIVE = ObjectiveType.PAIRCLASSIFICATION;
-                    }
-                    else if (cmds[1].Trim().ToUpper().Equals("PAIRREGRESSION_MSE"))
-                    {
-                        OBJECTIVE = ObjectiveType.PAIRREGRESSION_MSE;
-                    }
-                    else if (cmds[1].Trim().ToUpper().Equals("PAIRREGRESSION_LR"))
-                    {
-                        OBJECTIVE = ObjectiveType.PAIRREGRESSION_LR;
+                        OBJECTIVE = ObjectiveType.SOFTMAX;
                     }
                     else throw new Exception("NOT supported trainning objective!");
                 }
-                if (cmds[0].Equals("LINEAR_MAPPING"))
-                {
-                    Linear_Mapping = int.Parse(cmds[1].Trim().ToUpper());
-                }
-                if (cmds[0].Equals("NCE_PROB_FILE"))
-                {
-                    NCE_PROB_FILE = cmds[1];
-                }
-                if (cmds[0].Equals("LOSS_REPORT"))
+                //else if (cmds[0].Equals("LINEAR_MAPPING"))
+                //{
+                //    Linear_Mapping = int.Parse(cmds[1].Trim().ToUpper());
+                //}
+                else if (cmds[0].Equals("LOSS_REPORT"))
                 {
                     LOSS_REPORT = int.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("reserved_settings"))
+                else if (cmds[0].Equals("reserved_settings"))
                 {
                     reserved_settings = cmds[1];
                 }
-                if (cmds[0].Equals("CUBLAS"))
+                else if (cmds[0].Equals("CUBLAS"))
                 {
                     if (int.Parse(cmds[1]) == 1)
                     {
@@ -222,31 +175,15 @@ namespace DSMlib
                         CuBlasEnable = false;
                     }
                 }
-
-                if (cmds[0].Equals("NTRIAL"))
-                {
-                    NTRIAL = int.Parse(cmds[1]);
-                }
-                if (cmds[0].Equals("BATCHSIZE"))
+                else if (cmds[0].Equals("BATCHSIZE"))
                 {
                     BATCH_SIZE = int.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("PARM_GAMMA"))
+                else if (cmds[0].Equals("PARM_MARGIN"))
                 {
-                    PARM_GAMMA = float.Parse(cmds[1]);
+                    PARM_MARGIN = float.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("MIRROR_INIT"))
-                {
-                    if (int.Parse(cmds[1]) == 1)
-                    {
-                        MIRROR_INIT = true;
-                    }
-                    else
-                    {
-                        MIRROR_INIT = false;
-                    }
-                }
-                if (cmds[0].Equals("BIDSSM"))
+                else if (cmds[0].Equals("BIDSSM"))
                 {
                     if (int.Parse(cmds[1]) == 1)
                     {
@@ -257,229 +194,155 @@ namespace DSMlib
                         IS_SHAREMODEL = true;
                     }
                 }                
-                if (cmds[0].Equals("MAX_ITER"))
+                else if (cmds[0].Equals("MAX_ITER"))
                 {
                     MAX_ITER = int.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("SHALLOW_SOURCE"))
+                else if (cmds[0].Equals("SHALLOW_SOURCE"))
                 {
                     SHALLOW_SOURCE = cmds[1];
                     IS_SHALLOW = true;
                 }
-                if (cmds[0].Equals("SHALLOW_TARGET"))
+                else if (cmds[0].Equals("SHALLOW_TARGET"))
                 {
                     SHALLOW_TARGET = cmds[1];
                     IS_SHALLOW = true;
                 }
-                if (cmds[0].Equals("DEVICE"))
+                else if (cmds[0].Equals("DEVICE"))
                 {
                     device = int.Parse(cmds[1]);
                     Cudalib.CudaSetDevice(device);
                 }
-
-                if (cmds[0].Equals("LFILE"))
+                else if (cmds[0].Equals("LFILE"))
                 {
                     LFILE = cmds[1];
                 }
-
-                if (cmds[0].Equals("Q0FILE"))
+                else if (cmds[0].Equals("Q0FILE"))
                 {
                     QFILE_0 = cmds[1];
                 }
-                if (cmds[0].Equals("Q1FILE"))
+                else if (cmds[0].Equals("Q1FILE"))
                 {
                     QFILE_1 = cmds[1];
                 }
-                if (cmds[0].Equals("Q2FILE"))
+                else if (cmds[0].Equals("Q2FILE"))
                 {
                     QFILE_2 = cmds[1];
                 }
-
-
-                if (cmds[0].Equals("Q1_FEA_NORM"))
+                else if (cmds[0].Equals("Q1_FEA_NORM"))
                 {
                     Q1_FEA_NORM = int.Parse(cmds[1]);
                 }
-
-                if (cmds[0].Equals("Q2_FEA_NORm"))
+                else if (cmds[0].Equals("Q2_FEA_NORm"))
                 {
                     Q2_FEA_NORM = int.Parse(cmds[1]);
                 }
-
-                if (cmds[0].Equals("Q0_FEA_NORm"))
+                else if (cmds[0].Equals("Q0_FEA_NORm"))
                 {
                     Q0_FEA_NORM = int.Parse(cmds[1]);
                 }
-
-                if (cmds[0].Equals("LOGFILE"))
+                else if (cmds[0].Equals("CONTEXT_DIM"))
+                {
+                    CONTEXT_DIM = int.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("LOGFILE"))
                 {
                     Log_FileName = cmds[1];
                 }
-                if (cmds[0].Equals("LEARNINGRATE"))
+                else if (cmds[0].Equals("LEARNINGRATE"))
                 {
                     LearningParameters.lr_begin = float.Parse(cmds[1]);
                     LearningParameters.lr_mid = float.Parse(cmds[1]);
                     LearningParameters.lr_latter = float.Parse(cmds[1]);
                     LearningParameters.learning_rate = float.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("SEEDMODEL1"))
+                else if (cmds[0].Equals("SEEDMODEL1"))
                 {
                     SEEDMODEL1 = cmds[1];
                     ISSEED = true;
                     //NOTrain = true;
                 }
-                if (cmds[0].Equals("SEEDMODEL2"))
+                else if (cmds[0].Equals("SEEDMODEL2"))
                 {
                     SEEDMODEL2 = cmds[1];
                     ISSEED = true;
                     //NOTrain = true;
                 }
-                if (cmds[0].Equals("SEEDMODEL3"))
+                else if (cmds[0].Equals("SEEDMODEL3"))
                 {
                     SEEDMODEL3 = cmds[1];
                     ISSEED = true;
                 }
-                if (cmds[0].Equals("SEEDMODEL4"))
+                else if (cmds[0].Equals("SEEDMODEL4"))
                 {
                     SEEDMODEL4 = cmds[1];
                     ISSEED = true;
                 }
-
-                if (cmds[0].Equals("SOURCE_ARCH"))
+                else if (cmds[0].Equals("ARCH"))
                 {
                     string[] items = cmds[1].Split(',');
-                    SOURCE_ARCH = new int[items.Length];
+                    ARCH = new int[items.Length];
                     int i = 0;
                     foreach (string s in items)
                     {
-                        SOURCE_ARCH[i] = int.Parse(s);
+                        ARCH[i] = int.Parse(s);
                         i++;
                     }
                 }
-
-                if (cmds[0].Equals("TARGET_ARCH"))
+                else if (cmds[0].Equals("ARCH_WNDSIZE"))
                 {
                     string[] items = cmds[1].Split(',');
-                    TARGET_ARCH = new int[items.Length];
+                    ARCH_WND = new int[items.Length];
                     int i = 0;
                     foreach (string s in items)
                     {
-                        TARGET_ARCH[i] = int.Parse(s);
+                        ARCH_WND[i] = int.Parse(s);
                         i++;
                     }
                 }
-
-                if (cmds[0].Equals("SOURCE_ARCH_WIND"))
+                else if (cmds[0].Equals("LAYER_DIM"))
                 {
                     string[] items = cmds[1].Split(',');
-                    SOURCE_ARCH_WIND = new int[items.Length];
+                    LAYER_DIM = new int[items.Length];
                     int i = 0;
                     foreach (string s in items)
                     {
-                        SOURCE_ARCH_WIND[i] = int.Parse(s);
+                        LAYER_DIM[i] = int.Parse(s);
                         i++;
                     }
                 }
-
-                if (cmds[0].Equals("TARGET_ARCH_WIND"))
+                else if (cmds[0].Equals("LAYERWEIGHT_SIGMA"))
                 {
                     string[] items = cmds[1].Split(',');
-                    TARGET_ARCH_WIND = new int[items.Length];
+                    LAYERWEIGHT_SIGMA = new float[items.Length];
                     int i = 0;
                     foreach (string s in items)
                     {
-                        TARGET_ARCH_WIND[i] = int.Parse(s);
+                        LAYERWEIGHT_SIGMA[i] = float.Parse(s);
                         i++;
                     }
                 }
-
-                
-
-                if (cmds[0].Equals("SOURCE_LAYER_DIM"))
+                else if (cmds[0].Equals("ACTIVATION"))
                 {
                     string[] items = cmds[1].Split(',');
-                    SOURCE_LAYER_DIM = new int[items.Length];
+                    ACTIVATION = new int[items.Length];
                     int i = 0;
                     foreach (string s in items)
                     {
-                        SOURCE_LAYER_DIM[i] = int.Parse(s);
-                        i++;
-                    }
-                }
-
-                if (cmds[0].Equals("TARGET_LAYER_DIM"))
-                {
-                    string[] items = cmds[1].Split(',');
-                    TARGET_LAYER_DIM = new int[items.Length];
-                    int i = 0;
-                    foreach (string s in items)
-                    {
-                        TARGET_LAYER_DIM[i] = int.Parse(s);
-                        i++;
-                    }
-                }
-                if (cmds[0].Equals("SOURCE_LAYERWEIGHT_SIGMA"))
-                {
-                    string[] items = cmds[1].Split(',');
-                    SOURCE_LAYERWEIGHT_SIGMA = new float[items.Length];
-                    int i = 0;
-                    foreach (string s in items)
-                    {
-                        SOURCE_LAYERWEIGHT_SIGMA[i] = float.Parse(s);
-                        i++;
-                    }
-                }
-                if (cmds[0].Equals("TARGET_LAYERWEIGHT_SIGMA"))
-                {
-                    string[] items = cmds[1].Split(',');
-                    TARGET_LAYERWEIGHT_SIGMA = new float[items.Length];
-                    int i = 0;
-                    foreach (string s in items)
-                    {
-                        TARGET_LAYERWEIGHT_SIGMA[i] = float.Parse(s);
-                        i++;
-                    }
-                }
-                if (cmds[0].Equals("TARGET_ACTIVATION"))
-                {
-                    string[] items = cmds[1].Split(',');
-                    TARGET_ACTIVATION = new int[items.Length];
-                    int i = 0;
-                    foreach (string s in items)
-                    {
-                        TARGET_ACTIVATION[i] = int.Parse(s);
-                        i++;
-                    }
-                }
-                if (cmds[0].Equals("SOURCE_ACTIVATION"))
-                {
-                    string[] items = cmds[1].Split(',');
-                    SOURCE_ACTIVATION = new int[items.Length];
-                    int i = 0;
-                    foreach (string s in items)
-                    {
-                        SOURCE_ACTIVATION[i] = int.Parse(s);
+                        ACTIVATION[i] = int.Parse(s);
                         i++;
                     }
                 }                
-                if (cmds[0].Equals("VALIDATEQFILE"))
+                else if (cmds[0].Equals("VALIDATE_FILE"))
                 {
-                    VALIDATE_QFILE = cmds[1];
+                    VALIDATE_FILE = cmds[1];
                 }
-                if (cmds[0].Equals("VALIDATEDFILE"))
-                {
-                    VALIDATE_DFILE = cmds[1];
-                }
-                if (cmds[0].Equals("VALIDATEPAIR"))
-                {
-                    VALIDATE_QDPAIR = cmds[1];
-                }
-                if (cmds[0].Equals("VALIDATEPROCESS"))
+                else if (cmds[0].Equals("VALIDATEPROCESS"))
                 {
                     VALIDATE_PROCESS = cmds[1];
                     ISVALIDATE = true;
                 }
-                if (cmds[0].Equals("VALIDATE_MODEL_ONLY"))
+                else if (cmds[0].Equals("VALIDATE_MODEL_ONLY"))
                 {
                     if (int.Parse(cmds[1]) == 1)
                     {
@@ -490,54 +353,34 @@ namespace DSMlib
                         VALIDATE_MODEL_ONLY = false;
                     }
                 }
-                if (cmds[0].Equals("MODELPATH"))
+                else if (cmds[0].Equals("MODELPATH"))
                 {
                     MODEL_PATH = cmds[1];
                 }
-                if (cmds[0].Equals("EVULATIONEXE"))
+                else if (cmds[0].Equals("EVULATIONEXE"))
                 {
                     EVULATION_EXE = cmds[1];
                 }
-                if (cmds[0].Equals("LOAD_MODEL_OLD_FORMAT"))
+                else if (cmds[0].Equals("LOAD_MODEL_OLD_FORMAT"))
                 {
                     if (!bool.TryParse(cmds[1], out LoadModelOldFormat))
                     {
                         LoadModelOldFormat = cmds[1].Trim().Equals("1");
                     }
                 }
-                if (cmds[0].Equals("LOAD_INPUT_BACKWARD_COMPATIBLE_MODE"))
-                {
-                    if (cmds[1].Equals("BOW", StringComparison.OrdinalIgnoreCase))
-                    {
-                        LoadInputBackwardCompatibleMode = "BOW";
-                        FeatureValueAsInt = true;
-                    }
-                    else if (cmds[1].Equals("SEQ", StringComparison.OrdinalIgnoreCase))
-                    {
-                        LoadInputBackwardCompatibleMode = "SEQ";
-                        FeatureValueAsInt = true;
-                    }                    
-                }                
-                if (cmds[0].Equals("FEATURE_VALUE_AS_INT"))
-                {
-                    if (!bool.TryParse(cmds[1], out FeatureValueAsInt))
-                    {
-                        FeatureValueAsInt = cmds[1].Trim().Equals("1");
-                    }
-                }
-                if (cmds[0].Equals("REJECT_RATE"))
+                else if (cmds[0].Equals("REJECT_RATE"))
                 {
                     LearningParameters.reject_rate = float.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("DOWN_RATE"))
+                else if (cmds[0].Equals("DOWN_RATE"))
                 {
                     LearningParameters.down_rate = float.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("ACCEPT_RANGE"))
+                else if (cmds[0].Equals("ACCEPT_RANGE"))
                 {
                     LearningParameters.accept_range = float.Parse(cmds[1]);
                 }
-                if (cmds[0].Equals("MATH_LIB"))
+                else if (cmds[0].Equals("MATH_LIB"))
                 {
                     if (cmds[1].Trim().ToUpper() == "CPU")
                     {
@@ -548,7 +391,7 @@ namespace DSMlib
                         MATH_LIB = MathLibType.gpu;
                     }
                 }
-                if (cmds[0].Equals("CPU_MATH_LIB_THREAD_NUM"))
+                else if (cmds[0].Equals("CPU_MATH_LIB_THREAD_NUM"))
                 {
                     ParameterSetting.BasicMathLibThreadNum = int.Parse(cmds[1]);
                     if (ParameterSetting.BasicMathLibThreadNum < 1)
@@ -556,13 +399,13 @@ namespace DSMlib
                         throw new Exception("Error! CPU_MATH_LIB_THREAD_NUM should be >= 1");
                     }
                 }
-                if (cmds[0].Equals("RANDOM_SEED"))
+                else if (cmds[0].Equals("RANDOM_SEED"))
                 {
                     RANDOM_SEED = int.Parse(cmds[1]);
                     if (RANDOM_SEED >= 0) PSEUDO_RANDOM = true;
                     else                  PSEUDO_RANDOM = false;
                 }
-                if (cmds[0].Equals("UPDATE_BIAS"))
+                else if (cmds[0].Equals("UPDATE_BIAS"))
                 {
                     if (int.Parse(cmds[1]) == 1)
                     {
