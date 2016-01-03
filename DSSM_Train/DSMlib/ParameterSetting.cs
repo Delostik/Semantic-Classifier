@@ -65,6 +65,8 @@ namespace DSMlib
         public static int FEATURE_DEMENSION_Q1 = 0;
         public static int FEATURE_DEMENSION_Q2 = 0;
 
+        public static int FEATURE_DEMENSION_L = 0;
+
         public static string SHALLOW_SOURCE = "";
         public static string SHALLOW_TARGET = "";
         public static bool IS_SHALLOW = false;

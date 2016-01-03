@@ -105,6 +105,92 @@ namespace DSMlib
         }
     }
 
+    public class LabeledSequenceInputStream : IDisposable
+    {
+        public LabeledBatchSample_Input Data = null;
+
+        public int nLine = 0;
+        public int MAXSEGMENT_BATCH = 0;
+        public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
+        public int BATCH_NUM = 0;
+        public int BATCH_INDEX = 0;
+        public int LAST_INCOMPLETE_BATCH_SIZE = 0;
+
+        FileStream mstream = null;
+        BinaryReader mreader = null;
+
+        ~LabeledSequenceInputStream()
+        {
+            Dispose();
+        }
+
+        public void CloseStream()
+        {
+            if (mstream != null)
+            {
+                mreader.Close();
+                mstream.Close();
+                mreader = null;
+                mstream = null;
+            }
+            if (Data != null)
+            {
+                Data.Dispose();
+                Data = null;
+            }
+        }
+
+        public void get_dimension(string fileName)
+        {
+            mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            mreader = new BinaryReader(mstream);
+            mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
+
+            nLine = mreader.ReadInt32(); int batch_size = mreader.ReadInt32();
+            if (batch_size != ParameterSetting.BATCH_SIZE)
+            {
+                throw new Exception(string.Format(
+                    "Batch_Size does not match between configuration and input data!\n\tFrom config: {0}.\n\tFrom data ({1}): {2}"
+                    , ParameterSetting.BATCH_SIZE, fileName, batch_size)
+                );
+            }
+            MAXSEGMENT_BATCH = mreader.ReadInt32();
+
+            Data = new LabeledBatchSample_Input(ParameterSetting.BATCH_SIZE, MAXSEGMENT_BATCH);
+
+            BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
+            LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
+            BATCH_INDEX = 0;
+        }
+
+        public void Init()
+        {
+            BATCH_INDEX = 0;
+            mstream.Seek(0, SeekOrigin.Begin);
+        }
+
+        void LoadDataBatch()
+        {
+            Data.Load(mreader, ParameterSetting.BATCH_SIZE);
+        }
+
+        public bool Fill()
+        {
+            if (BATCH_INDEX == BATCH_NUM)
+            {
+                return false;
+            }
+            LoadDataBatch();
+            BATCH_INDEX++;
+            return true;
+        }
+
+        public void Dispose()
+        {
+            CloseStream();
+        }
+    }
+
     public class EvaluationSet
     {
         public static EvaluationSet Create(Evaluation_Type type)
@@ -599,6 +685,128 @@ namespace DSMlib
             q0stream.Dispose();
             q1stream.Dispose();
             q2stream.Dispose();
+            CloseAllStreams();
+        }
+    }
+
+    public class LabeledInputStream : IDisposable
+    {
+        public LabeledSequenceInputStream lstream = new LabeledSequenceInputStream();
+
+        public static int MAXSEGMENT_BATCH = 40000;
+        //public static int QUERY_MAXSEGMENT_BATCH = 40000;
+        //public static int DOC_MAXSEGMENT_BATCH = 40000;
+
+        /********How to transform the qbatch, dbatch and negdbatch into GPU Memory**********/
+        public LabeledBatchSample_Input GPU_lbatch { get { return lstream.Data; } }
+        /*************************************************************************************/
+
+        /**************** Associated streams *************/
+        public StreamReader srNCEProbDist = null;
+
+        ~LabeledInputStream()
+        {
+            Dispose();
+        }
+
+        #region For Validation stuff
+
+        EvaluationSet eval = null;
+        public void Eval_Init()
+        {
+            eval.Init();
+        }
+
+        public void Eval_Ouput_Batch(float[] score, float[] groundTrue, int[] args)
+        {
+            eval.Ouput_Batch(score, groundTrue, args);
+        }
+
+        public float Eval_Score(out List<string> validationFileLines)
+        {
+            return eval.Evaluation(out validationFileLines);
+        }
+
+        public float Eval_Score_ModelOnlyEvaluationModelOnly(string srcModelPath, string tgtModelPath, out List<string> validationFileLines)
+        {
+            return EvaluationSet.EvaluationModelOnly(srcModelPath, tgtModelPath, out validationFileLines);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Used by valid input
+        /// </summary>
+        /// <param name="qFileName"></param>
+        /// <param name="dFileName"></param>
+        /// <param name="pairFileName"></param>
+        public void Load_Validate_PairData(string lFileName, string pairFileName, Evaluation_Type type)
+        {
+            Load_PairData(lFileName, null);
+
+            eval = EvaluationSet.Create(type);
+
+            eval.Loading_LabelInfo(new string[] { pairFileName });
+        }
+        /// <summary>
+        /// Used by training input
+        /// </summary>
+        /// <param name="qFileName"></param>
+        /// <param name="dFileName"></param>
+        /// <param name="nceProbDistFile"></param>
+        public void Load_Train_TriData(string lFileName, string nceProbDistFile = null)
+        {
+            Load_PairData(lFileName, nceProbDistFile);
+
+            //// We only update feature dimension from train stream on the first fresh kickoff
+            //// whenever the feature dimensions have been set or load from models, we will skip the update here
+            if (ParameterSetting.FEATURE_DEMENSION_L <= 0)
+            {
+                ParameterSetting.FEATURE_DEMENSION_L = lstream.Feature_Size;
+            }
+        }
+
+        void Load_PairData(string lFileName, string nceProbDistFile)
+        {
+            CloseAllStreams();
+            lstream.get_dimension(lFileName);
+            if (nceProbDistFile != null)
+            {
+                this.srNCEProbDist = new StreamReader(nceProbDistFile);
+            }
+
+            MAXSEGMENT_BATCH = lstream.MAXSEGMENT_BATCH;
+        }
+
+        public void Init_Batch()
+        {
+            lstream.Init();
+        }
+
+        public bool Next_Batch()
+        {
+            if (!lstream.Fill())
+            {
+                return false;
+            }
+            lstream.Data.Batch_In_GPU();
+            return true;
+        }
+
+        public void CloseAllStreams()
+        {
+            lstream.CloseStream();
+
+            if (this.srNCEProbDist != null)
+            {
+                this.srNCEProbDist.Close();
+                this.srNCEProbDist = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            lstream.Dispose();
             CloseAllStreams();
         }
     }
