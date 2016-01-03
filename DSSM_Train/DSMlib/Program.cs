@@ -71,7 +71,7 @@ namespace DSMlib
 
                 timer.Reset();
                 timer.Start();
-                Print("Loading doc Query Stream ....");
+                Print("Loading training data ....");
 
                 if (ParameterSetting.CuBlasEnable)
                 {

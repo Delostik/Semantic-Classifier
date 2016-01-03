@@ -32,8 +32,10 @@ namespace DSMlib
         public CudaPieceFloat bias;
 
         //***** Added by Ziyu Guan
-        public int[] wnd_sizes = { 1, 2, 3 };
-        public int[] num_fms; // number of feature maps for each window size. This array must have the same size as wnd_sizes and the sum of its elements must equal to Neural_Out.Number
+        public CudaPieceInt winsizes = null;
+        public CudaPieceInt fmsizes = null;
+        public int[] wnd_sizes { get { return winsizes.MemPtr; } }
+        public int[] num_fms { get { return fmsizes.MemPtr; } } // number of feature maps for each window size. This array must have the same size as wnd_sizes and the sum of its elements must equal to Neural_Out.Number
         public int[] ma_sizes;
         public NeuralLayer Extra_Input; // for extra context input, Nt = Composite_Full
         //***** Added by Ziyu Guan
@@ -74,8 +76,19 @@ namespace DSMlib
             //Neural_In.Number = Neural_In.Number; // *N_Winsize;
             Nt = nt;
             N_Winsize = win_size;
-            wnd_sizes = winsizes;
-            num_fms = fmcounts;
+
+            if (winsizes != null && fmcounts != null)
+            {
+                this.winsizes = new CudaPieceInt(winsizes.Length, true, true);
+                this.fmsizes = new CudaPieceInt(fmcounts.Length, true, true);
+                for (int i = 0; i < winsizes.Length; i++)
+                {
+                    this.winsizes.MemPtr[i] = winsizes[i];
+                    this.fmsizes.MemPtr[i] = fmcounts[i];
+                }
+                this.winsizes.CopyIntoCuda();
+                this.fmsizes.CopyIntoCuda();
+            }
 
             Af = af;
             initHidBias = hidBias;
@@ -111,7 +124,11 @@ namespace DSMlib
         public void Dispose()
         {
             weight.Dispose();
-            bias.Dispose();            
+            bias.Dispose();
+            if (winsizes != null)
+                winsizes.Dispose();
+            if (fmsizes != null)
+                fmsizes.Dispose();
         }
 
         //***** Modified by Ziyu Guan
@@ -733,15 +750,23 @@ namespace DSMlib
     public class LookupTabRunData : IDisposable
     {
         LookupTab table;
+        public LookupTab Table { get { return table; } }
+
         public int Dim { get { return table.vecDim; } }
         public int Count { get { return table.count; } }
         bool isWordInput; // if wordInput, use MAXSEGMENT_BATCH to construct InputDeriv
 
-        CudaPieceFloat[] inputDerivs;
-        CudaPieceFloat tabUpdate;
+        CudaPieceFloat[] inputDerivs = null;
+        CudaPieceFloat tabUpdate = null;
 
         public CudaPieceFloat[] InputDeriv { get { return inputDerivs; } }
         public CudaPieceFloat TabUpdate { get { return tabUpdate; } }
+
+        //some auxiliary variables
+        public CudaPieceInt uniqueWordID = null;
+        public CudaPieceInt uniqueWordIdx = null;
+        public CudaPieceInt Sequence = null;
+        public int uniqueNum;
 
         public LookupTabRunData(LookupTab table, bool isWordInput)
         {
@@ -753,13 +778,17 @@ namespace DSMlib
             if (isWordInput)
             {
                 for (int i = 0; i < inputDerivs.Length; i++)
-                    inputDerivs[i] = new CudaPieceFloat(Dim * ParameterSetting.MAXSEGMENT_BATCH, false, true);
+                    inputDerivs[i] = new CudaPieceFloat(Dim * PairInputStream.MAXSEGMENT_BATCH, false, true);
+                Sequence = new CudaPieceInt(3 * PairInputStream.MAXSEGMENT_BATCH, true, true);
             }
             else
             {
                 for (int i = 0; i < inputDerivs.Length; i++)
                     inputDerivs[i] = new CudaPieceFloat(Dim * ParameterSetting.BATCH_SIZE, false, true);
+                Sequence = new CudaPieceInt(3 * ParameterSetting.BATCH_SIZE, true, true);
             }
+            uniqueWordID = new CudaPieceInt(Count, true, true);
+            uniqueWordIdx = new CudaPieceInt(Count, true, true);
             
         }
 
@@ -780,6 +809,21 @@ namespace DSMlib
             {
                 tabUpdate.Dispose();
                 tabUpdate = null;
+            }
+            if (uniqueWordID != null)
+                uniqueWordID.Dispose();
+            if (uniqueWordIdx != null)
+                uniqueWordIdx.Dispose();
+            if (Sequence != null)
+                Sequence.Dispose();
+        }
+
+        public void ZeroDeriv()
+        {
+            if (inputDerivs != null)
+            {
+                foreach (CudaPieceFloat e in inputDerivs)
+                    e.Zero();
             }
         }
 
@@ -805,8 +849,8 @@ namespace DSMlib
                 errorDerivs = new CudaPieceFloat[3];
                 for (int i = 0; i < outputs.Length; i++)
                 {
-                    outputs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
-                    errorDerivs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, true, true);
+                    outputs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, false, true);
+                    errorDerivs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, false, true);                   
                 }
             }
         }
@@ -828,6 +872,7 @@ namespace DSMlib
         {
             get { return errorDerivs; }
         }
+
 
         ~NeuralLayerData()
         {
@@ -895,6 +940,26 @@ namespace DSMlib
         }
 
         /// <summary>
+        /// Output cache for composite layer
+        /// </summary>
+        CudaPieceFloat[] composite_outputs = null;
+
+        public CudaPieceFloat[] CompOutputs
+        {
+            get { return composite_outputs; }
+        }
+
+        /// <summary>
+        /// composite error derivatives
+        /// </summary>
+        CudaPieceFloat[] composite_errors = null;
+
+        public CudaPieceFloat[] CompErrors
+        {
+            get { return composite_errors; }
+        }
+
+        /// <summary>
         /// Wei_Update = momentum * Wei_Update + learn_rate * grad.
         /// Weight = Weight + Wei_Update
         /// </summary>
@@ -921,7 +986,7 @@ namespace DSMlib
                 layerMaxPooling_Indices = new CudaPieceInt[3];
                 for (int i = 0; i < 3; i++)
                 {
-                    // for multi-window case, we still allocate the same size of space, but pooling output stores three matrices, each of size (seg_size - batchsize*(win_size-1))* fm_size
+                    // **now has the same shape as in single convolution, but some cells are invalid** for multi-window case, we still allocate the same size of space, but pooling output stores three matrices, each of size (seg_size - batchsize*(win_size-1))* fm_size
                     layerPoolingOutputs[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, false, true);
                     layerMaxPooling_Indices[i] = new CudaPieceInt(ParameterSetting.BATCH_SIZE * neuralLinkModel.Neural_Out.Number, false, true);
                 }                 
@@ -935,7 +1000,15 @@ namespace DSMlib
             }
             else if (neuralLinkModel.Nt == N_Type.Composite_Full)
             {
-                totalweightsize = neuralLinkModel.Neural_Out.Number * (neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number);
+                totalweightsize = neuralLinkModel.Neural_Out.Number * (neuralLinkModel.Neural_In.Number + neuralLinkModel.Extra_Input.Number);
+                // Create space for composite outputs and their derivatives
+                composite_outputs = new CudaPieceFloat[3];
+                composite_errors = new CudaPieceFloat[3];
+                for (int i = 0; i < composite_errors.Length; i++)
+                {
+                    composite_outputs[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, false, true);
+                    composite_errors[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, false, true);
+                }
             }
             else
                 totalweightsize = neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize;
@@ -967,6 +1040,20 @@ namespace DSMlib
                     e.Dispose();
                 layerMaxPooling_Indices = null;
             }
+
+            if (composite_outputs != null)
+            {
+                foreach (CudaPieceFloat e in composite_outputs)
+                    e.Dispose();
+                composite_outputs = null;
+            }
+            if (composite_errors != null)
+            {
+                foreach (CudaPieceFloat e in composite_errors)
+                    e.Dispose();
+                composite_errors = null;
+            }
+
             if (weightDeriv != null)
             {
                 weightDeriv.Dispose();
@@ -1028,8 +1115,9 @@ namespace DSMlib
         /// given batch of input data. calculate the output.
         /// </summary>
         /// <param name="data"></param>
+        /// <param name="q">indicate which sentence in an instance, 0 -- s1, 1 -- s2, 2 -- s3</param>
         //unsafe public void forward_activate( BatchSample_Input data, List<Amplib.AMPArrayInternal> layerOutputs)
-        unsafe public void forward_activate(BatchSample_Input data)
+        unsafe public void forward_activate(BatchSample_Input data, int q)
         {
             int layerIndex = 0;
             foreach (NeuralLinkData neurallinkData in neurallinks)
@@ -1040,31 +1128,44 @@ namespace DSMlib
                 {
                     if (neurallink.Nt == N_Type.Fully_Connected)
                     {
-                        MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Multiply_INTEX(data, neurallink.weight, neurallayers[layerIndex + 1].Output,
-                                        neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
+                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional!");
+                        //MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Multiply_INTEX(data, neurallink.weight, neurallayers[layerIndex + 1].Outputs[q],
+                        //               neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
                     }
                     else if (neurallink.Nt == N_Type.Convolution_layer)
                     {
-                        MathOperatorManager.GlobalInstance.Convolution_Sparse_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
+                        MathOperatorManager.GlobalInstance.Convolution_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
 
-                        MathOperatorManager.GlobalInstance.Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.N_Winsize);
+                    }
+                    else  // must be multi-convolutional, composite layer cannot be the first layer
+                    {
+                        MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
+                        MathOperatorManager.GlobalInstance.Multi_Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
                     }
                 }
                 else
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[layerIndex].Output, neurallink.weight, neurallayers[layerIndex + 1].Output, data.batchsize, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, 0);
+                    if (neurallink.Nt == N_Type.Composite_Full)
+                    {
+                        MathOperatorManager.GlobalInstance.FillOut_Composite(neurallayers[layerIndex].Outputs[q], data, neurallinkData.CompOutputs[q], contextLT.Table, contextLT.InputDeriv[q], neurallink.Neural_In.Number, neurallink.Extra_Input.Number, 1);
+                        MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallinkData.CompOutputs[q], neurallink.weight, neurallayers[layerIndex + 1].Outputs[q], data.batchsize, neurallink.Neural_In.Number + neurallink.Extra_Input.Number, neurallink.Neural_Out.Number, 0);
+                    }
+                    else
+                        MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[layerIndex].Outputs[q], neurallink.weight, neurallayers[layerIndex + 1].Outputs[q], data.batchsize, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, 0);
                 }
+
                 if (neurallink.Af == A_Func.Tanh)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
                 }
                 else if (neurallink.Af == A_Func.Linear)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
                 }
                 else if (neurallink.Af == A_Func.Rectified)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
                 }
                 layerIndex += 1;
             }
@@ -1074,51 +1175,105 @@ namespace DSMlib
         /// BackProp the error derivative on the output of each layer.
         /// The output layer's errorDeriv must be previuosly setup.
         /// </summary>
-        unsafe public void backward_calculate_layerout_deriv(int batchsize)
+        unsafe public void backward_calculate_layerout_deriv(BatchSample_Input input_batch, int q)
         {
+            int batchsize = input_batch.batchsize;
             for (int i = neurallinks.Count - 1; i > 0; i--)
             {
-                MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[i + 1].ErrorDeriv, neurallinks[i].NeuralLinkModel.weight, neurallayers[i].ErrorDeriv, batchsize,
-                        neurallinks[i].NeuralLinkModel.Neural_Out.Number, neurallinks[i].NeuralLinkModel.Neural_In.Number, 1);
+                NeuralLink nlink = neurallinks[i].NeuralLinkModel;
+                if (nlink.Nt == N_Type.Fully_Connected)
+                {
+                    MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[i + 1].ErrorDerivs[q], nlink.weight, neurallayers[i].ErrorDerivs[q], batchsize,
+                            nlink.Neural_Out.Number, nlink.Neural_In.Number, 1);
+                }
+                else // must be composite full
+                {
+                    MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[i + 1].ErrorDerivs[q], nlink.weight, neurallinks[i].CompErrors[q], batchsize,
+                            nlink.Neural_Out.Number, (nlink.Neural_In.Number*nlink.N_Winsize + nlink.Extra_Input.Number), 1);
+                    MathOperatorManager.GlobalInstance.FillOut_Composite(neurallayers[i].ErrorDerivs[q], input_batch, neurallinks[i].CompErrors[q], contextLT.Table, contextLT.InputDeriv[q],
+                            nlink.Neural_In.Number, nlink.Extra_Input.Number, 0);
+                }
+
                 if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Tanh)
                 {
-                    MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, neurallinks[i].NeuralLinkModel.Neural_In.Number);
+                    MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
                 }
                 else if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Rectified)
                 {
-                    MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, neurallinks[i].NeuralLinkModel.Neural_In.Number);
+                    MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
                 }
             }
         }
 
-        unsafe public void backward_calculate_weight_deriv(BatchSample_Input input_batch) //, int alpha_index) // float[] alpha)
+        unsafe public void backward_calculate_weight_deriv(BatchSample_Input[] input_batches) // 0-q1,1-q2,2-q3
         {
-            int batchsize = input_batch.batchsize;
+            //Calculate derivatives for all parameters, including link weight, bias and lookup tables. The derivatives for context table have already been computed 
+            int batchsize = input_batches[0].batchsize;
             for (int i = 0; i < neurallinks.Count; i++)
             {
                 neurallinks[i].ZeroDeriv();
 
                 if (ParameterSetting.UpdateBias)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Aggragate(neurallayers[i + 1].ErrorDeriv, neurallinks[i].BiasDeriv, input_batch.batchsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
+                    MathOperatorManager.GlobalInstance.Matrix_Aggragate(neurallayers[i + 1].ErrorDerivs[0], neurallayers[i + 1].ErrorDerivs[1], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].BiasDeriv, batchsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                 }
 
                 if (i == 0)
                 {
                     if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Fully_Connected)
                     {
-                        MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch, neurallinks[i].WeightDeriv, neurallayers[i + 1].ErrorDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number, neurallinks[i].NeuralLinkModel.Neural_Out.Number, neurallinks[i].NeuralLinkModel.N_Winsize);
+                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional!");
+                        //MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch, neurallinks[i].WeightDeriv, neurallayers[i + 1].ErrorDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number, neurallinks[i].NeuralLinkModel.Neural_Out.Number, neurallinks[i].NeuralLinkModel.N_Winsize);
                     }
                     else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Convolution_layer)
                     {
-                        MathOperatorManager.GlobalInstance.Convolution_Sparse_Matrix_Product_INTEX(neurallayers[i + 1].ErrorDeriv, neurallinks[i].LayerMaxPooling_Index, input_batch, neurallinks[i].NeuralLinkModel.N_Winsize,
+                        MathOperatorManager.GlobalInstance.Convolution_Matrix_Product_INTEX(neurallayers[i + 1].ErrorDerivs[0], neurallinks[i].LayerMaxPooling_Indices[0], neurallayers[i + 1].ErrorDerivs[1], neurallinks[i].LayerMaxPooling_Indices[1], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].LayerMaxPooling_Indices[2], wordLT.Table, 
+                                     input_batches[0], input_batches[1], input_batches[2], neurallinks[i].NeuralLinkModel.N_Winsize,
                                      batchsize, neurallayers[i + 1].Number, neurallinks[i].WeightDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number);
+                    }
+                    else // must be multi-convolutional, composite layer cannot be the first layer
+                    {
+                        int accu = 0;
+                        for (int b = 0; b < neurallinks[i].NeuralLinkModel.num_fms.Length; b++)
+                        {
+                            MathOperatorManager.GlobalInstance.MultiConv_Matrix_Product_INTEX(neurallayers[i + 1].ErrorDerivs[0], neurallinks[i].LayerMaxPooling_Indices[0], neurallayers[i + 1].ErrorDerivs[1], neurallinks[i].LayerMaxPooling_Indices[1], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].LayerMaxPooling_Indices[2], wordLT.Table,
+                                     input_batches[0], input_batches[1], input_batches[2],
+                                     batchsize, neurallayers[i + 1].Number, neurallinks[i].WeightDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number, neurallinks[i].NeuralLinkModel.wnd_sizes[b], neurallinks[i].NeuralLinkModel.num_fms[b], accu, b>0?neurallinks[i].NeuralLinkModel.ma_sizes[b-1]:0);
+                            accu += neurallinks[i].NeuralLinkModel.num_fms[b];
+                        }                     
                     }
                 }
                 else
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Product(neurallayers[i].Output, neurallayers[i + 1].ErrorDeriv, neurallinks[i].WeightDeriv,
-                        batchsize, neurallayers[i].Number, neurallayers[i + 1].Number);
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Fully_Connected)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Product(neurallayers[i].Outputs[0], neurallayers[i + 1].ErrorDerivs[0], neurallayers[i].Outputs[1], neurallayers[i + 1].ErrorDerivs[1], neurallayers[i].Outputs[2], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].WeightDeriv,
+                                                batchsize, neurallayers[i].Number, neurallayers[i + 1].Number);
+                    }
+                    else // must be composite full
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Product(neurallinks[i].CompOutputs[0], neurallayers[i + 1].ErrorDerivs[0], neurallinks[i].CompOutputs[1], neurallayers[i + 1].ErrorDerivs[1], neurallinks[i].CompOutputs[2], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].WeightDeriv,
+                                                batchsize, (neurallayers[i].Number + neurallinks[i].NeuralLinkModel.Extra_Input.Number), neurallayers[i + 1].Number);
+                    }
+                    
+                }
+            }
+            //Finally, word vector derivatives
+            wordLT.ZeroDeriv();
+            if (neurallinks[0].NeuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    MathOperatorManager.GlobalInstance.MultiConv_Compute_WVDERIV(neurallayers[1].ErrorDerivs[i], neurallinks[0].LayerMaxPooling_Indices[i], neurallinks[0].NeuralLinkModel.weight, batchsize,
+                                neurallayers[1].Number, wordLT.InputDeriv[i], neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.winsizes, neurallinks[0].NeuralLinkModel.fmsizes);
+                }
+            }
+            else // convolution
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    MathOperatorManager.GlobalInstance.Conv_Compute_WVDERIV(neurallayers[1].ErrorDerivs[i], neurallinks[0].LayerMaxPooling_Indices[i], neurallinks[0].NeuralLinkModel.weight, batchsize,
+                                neurallayers[1].Number, wordLT.InputDeriv[i], neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.N_Winsize);
                 }
             }
         }
@@ -1131,30 +1286,52 @@ namespace DSMlib
         /// <param name="input_batch"></param>
         /// <param name="momentum"></param>
         /// <param name="learning_rate"></param>
-        public void backward_propagate_deriv(BatchSample_Input input_batch)
+        public void backward_propagate_deriv(BatchSample_Input[] input_batches)
         {
             // step 1, compute the derivatives for the output values of each layer
-            backward_calculate_layerout_deriv(input_batch.batchsize);
+            for (int q = 0; q < 3; q++)
+                backward_calculate_layerout_deriv(input_batches[q], q);
             // step 2, compute the derivatives for the connections of each neural link layer
-            backward_calculate_weight_deriv(input_batch);            
+            backward_calculate_weight_deriv(input_batches);
+            summarizeUnique(input_batches);
         }
 
         /// <summary>
         /// Must call backward_propagate(), or two steps one by one, before calling this method.
         /// </summary>
-        unsafe public void update_weight(float momentum, float learning_rate)
+        unsafe public void update_weight(BatchSample_Input[] input_batches, float momentum, float learning_rate)
         {
+            /// First, update weights and bias
             /// step 1, compute the weight updates, taking momentum and learning rates into consideration
             /// Wei_Update = momentum * Wei_Update + learn_rate * grad.
+            int row, col;
             for (int i = 0; i < neurallinks.Count; i++)
             {
+                if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Composite_Full)
+                {
+                    row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    col = neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize + neurallinks[i].NeuralLinkModel.Extra_Input.Number;
+                }
+                else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
+                {
+                    // treat feature dimensin as num of rows
+                    row = neurallinks[i].NeuralLinkModel.Neural_In.Number;
+                    col = neurallinks[i].NeuralLinkModel.ma_sizes[neurallinks[i].NeuralLinkModel.ma_sizes.Length - 1] / row;
+                }
+                else
+                {
+                    row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    col = neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize;
+                }
                 // add the momentum
-                MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].WeightUpdate, neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number, momentum);
+                MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].WeightUpdate, col, row, momentum);
 
                 // dnn_neurallinks[i].Weight
-                MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].WeightUpdate, neurallinks[i].WeightDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
-                
-                //dnn_model.neurallinks[i].Bias
+                MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].WeightUpdate, neurallinks[i].WeightDeriv, col, row, learning_rate);
+
+                // update the model: Weight = Weight += Wei_Update
+                MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, col, row);
+
                 if (ParameterSetting.UpdateBias)
                 {
                     // add the momentum
@@ -1162,22 +1339,102 @@ namespace DSMlib
 
                     // dnn_neurallinks[i].Weight
                     MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                    // upate the model
+                    MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                 }
             }
 
-            // step 2, update the model: Weight = Weight += Wei_Update
-            for (int i = 0; i < neurallinks.Count; i++)
+            // update lookup tables
+            if (momentum == 0)
             {
-                // dnn_model.neurallinks[i].Weight
-                MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number, 1.0f);
-
-                if (ParameterSetting.UpdateBias)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, 1.0f);
-                }
-                //dnn_model.neurallinks[i].Bias
-                //Cudalib.Matrix_Add(dnn_model_query.neurallinks[i].Bias, Wei_Update_query.Layer_Bias[i], 1, dnn_model_query.neurallinks[i].Neural_Out.Number, 1.0f);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(wordLT.Table, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(contextLT.Table, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, learning_rate);
             }
+            else
+            {
+                MathOperatorManager.GlobalInstance.Scale_Matrix(wordLT.TabUpdate, wordLT.Table.count, wordLT.Table.vecDim, momentum);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Matrix_Add_REAL(wordLT.Table.table, wordLT.TabUpdate, wordLT.Table.count, wordLT.Table.vecDim);
+
+                MathOperatorManager.GlobalInstance.Scale_Matrix(contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim, momentum);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Matrix_Add_REAL(contextLT.Table.table, contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim);
+            }
+
+        }
+
+        unsafe void summarizeUnique(BatchSample_Input[] inputBatches)
+        {
+            Dictionary<int, List<int>> wordSum = new Dictionary<int, List<int>>(10000);
+            int offset = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < inputBatches[i].Word_Idx_Mem.Length; j++)
+                {
+                    int w = inputBatches[i].Word_Idx_Mem[j];
+                    if (wordSum.ContainsKey(w))
+                        wordSum[w].Add(offset);
+                    else
+                    {
+                        wordSum.Add(w, new List<int>());
+                        wordSum[w].Add(offset);
+                    }
+                    offset++;
+                }
+            }
+            int c1 = 0, c2 = 0;
+            foreach (KeyValuePair<int, List<int>> d in wordSum)
+            {
+                wordLT.uniqueWordID.MemPtr[c1] = d.Key;
+                for (int i = 0; i < d.Value.Count; i++)
+                {
+                    wordLT.Sequence.MemPtr[c2] = d.Value[i];
+                    c2++;
+                }
+                wordLT.uniqueWordIdx.MemPtr[c1] = c2;
+                c1++;
+            }
+            wordLT.uniqueNum = c1;
+
+            wordSum.Clear();
+            offset = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < inputBatches[i].Fea_Mem.Length; j++)
+                {
+                    int w = inputBatches[i].Fea_Mem[j];
+                    if (wordSum.ContainsKey(w))
+                        wordSum[w].Add(offset);
+                    else
+                    {
+                        wordSum.Add(w, new List<int>());
+                        wordSum[w].Add(offset);
+                    }
+                    offset++;
+                }
+            }
+            c1 = 0; 
+            c2 = 0;
+            foreach (KeyValuePair<int, List<int>> d in wordSum)
+            {
+                contextLT.uniqueWordID.MemPtr[c1] = d.Key;
+                for (int i = 0; i < d.Value.Count; i++)
+                {
+                    contextLT.Sequence.MemPtr[c2] = d.Value[i];
+                    c2++;
+                }
+                contextLT.uniqueWordIdx.MemPtr[c1] = c2;
+                c1++;
+            }
+            contextLT.uniqueNum = c1;
+
+            wordLT.uniqueWordID.CopyIntoCuda();
+            wordLT.uniqueWordIdx.CopyIntoCuda();
+            wordLT.Sequence.CopyIntoCuda();
+
+            contextLT.uniqueWordID.CopyIntoCuda();
+            contextLT.uniqueWordIdx.CopyIntoCuda();
+            contextLT.Sequence.CopyIntoCuda();
         }
     }
 }
