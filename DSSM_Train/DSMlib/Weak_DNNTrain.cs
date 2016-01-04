@@ -150,7 +150,7 @@ namespace DSMlib
             return error;
         }
 
-        List<Tuple<string, string>> pairTrainFiles = new List<Tuple<string, string>>();
+        List<List<string>> pairTrainFiles = new List<List<string>>();
         int pairTrainFilesIdx = 0;
         List<string> ConstructShuffleTrainFiles(string file)
         {
@@ -165,31 +165,20 @@ namespace DSMlib
 
         void LoadPairDataAtIdx()
         {
-            Program.Print(string.Format("Loading pair training data : {0} and {1}",
-                        new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx].Item1).Name,
-                        new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx].Item2).Name
+            Program.Print(string.Format("Loading training data : {0} and {1} and {2}",
+                        new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx][0]).Name,
+                        new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx][1]).Name,
+                        new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx][2]).Name
                         ));
             //compose NCEProbDFile if needed
-            string nceProbFileName = null;
-            if (ParameterSetting.OBJECTIVE == ObjectiveType.NCE) //NCE
-            {
-                if (!ParameterSetting.NCE_PROB_FILE.Equals("_null_"))
-                {
-                    nceProbFileName = ParameterSetting.NCE_PROB_FILE;
-                    string tmpFileName = new FileInfo(this.pairTrainFiles[this.pairTrainFilesIdx].Item2).Name;
-                    int pos = tmpFileName.IndexOf(".shuffle");
-                    if (pos >= 0)
-                    {
-                        nceProbFileName = ParameterSetting.NCE_PROB_FILE + tmpFileName.Substring(pos);
-                    }
-                }
-            }
+            //string nceProbFileName = null;
 
-            TriStream.Load_Train_PairData(pairTrainFiles[pairTrainFilesIdx].Item1, pairTrainFiles[pairTrainFilesIdx].Item2, nceProbFileName);
+
+            TriStream.Load_Train_TriData(pairTrainFiles[pairTrainFilesIdx], null);
             
-            SrcNorm = Normalizer.CreateFeatureNormalize((NormalizerType)ParameterSetting.Q_FEA_NORM, TriStream.qstream.Feature_Size);
-            TgtNorm = Normalizer.CreateFeatureNormalize((NormalizerType)ParameterSetting.D_FEA_NORM, TriStream.dstream.Feature_Size);
-            TriStream.InitFeatureNorm(SrcNorm, TgtNorm);
+            //SrcNorm = Normalizer.CreateFeatureNormalize((NormalizerType)ParameterSetting.Q_FEA_NORM, TriStream.qstream.Feature_Size);
+            //TgtNorm = Normalizer.CreateFeatureNormalize((NormalizerType)ParameterSetting.D_FEA_NORM, TriStream.dstream.Feature_Size);
+            //TriStream.InitFeatureNorm(SrcNorm, TgtNorm);
             
             
             pairTrainFilesIdx = (pairTrainFilesIdx + 1) % pairTrainFiles.Count;            
@@ -200,32 +189,34 @@ namespace DSMlib
             Program.timer.Reset();
             Program.timer.Start();
 
-            List<string> srcTrainFiles = ConstructShuffleTrainFiles(files[0]);
-            List<string> tgtTrainFiles = ConstructShuffleTrainFiles(files[1]);
-            if (srcTrainFiles.Count != tgtTrainFiles.Count)
+            List<string> s1TrainFiles = ConstructShuffleTrainFiles(files[0]);
+            List<string> s2TrainFiles = ConstructShuffleTrainFiles(files[1]);
+            List<string> s3TrainFiles = ConstructShuffleTrainFiles(files[2]);
+            if (s1TrainFiles.Count != s2TrainFiles.Count || s1TrainFiles.Count != s3TrainFiles.Count || s2TrainFiles.Count != s3TrainFiles.Count)
             {
-                throw new Exception(string.Format("Error! src and tgt have different training files: {0} vs {1}", srcTrainFiles.Count, tgtTrainFiles.Count));
+                throw new Exception(string.Format("Error! training data have inconsistent number of training files: {0}, {1}, {2}", s1TrainFiles.Count, s2TrainFiles.Count, s3TrainFiles.Count));
             }
-            if (srcTrainFiles.Count == 0)
+            if (s1TrainFiles.Count == 0)
             {
                 throw new Exception(string.Format("Error! zero training files found!"));
             }
-            pairTrainFiles = Enumerable.Range(0, srcTrainFiles.Count).Select(idx => new Tuple<string, string>(srcTrainFiles[idx], tgtTrainFiles[idx])).ToList();
+            pairTrainFiles = Enumerable.Range(0, s1TrainFiles.Count).Select(idx => new string[] {s1TrainFiles[idx], s2TrainFiles[idx], s3TrainFiles[idx]}.ToList()).ToList();
             pairTrainFilesIdx = 0;
 
             LoadPairDataAtIdx();
             
             
             Program.timer.Stop();
-            Program.Print("loading Training doc query stream done : " + Program.timer.Elapsed.ToString());
+            Program.Print("loading Training data stream done : " + Program.timer.Elapsed.ToString());
         }
 
 
         public override void LoadValidateData(string[] files)
         {
+            // under construction
             Program.timer.Reset();
             Program.timer.Start();
-            PairValidStream.Load_Validate_PairData(files[0], files[1], files[2], Evaluation_Type.PairScore); 
+            //validStream.Load_Validate_PairData(files[0], files[1], files[2], Evaluation_Type.PairScore); 
             
             //ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR);
             Program.timer.Stop();
@@ -239,7 +230,7 @@ namespace DSMlib
         public override float Evaluate()
         {
  	        // under construction
-            return 0;
+            return 1.0f;
         }
 
 
@@ -249,95 +240,53 @@ namespace DSMlib
         /// <param name="srcModelPath"></param>
         /// <param name="tgtModelPath"></param>
         /// <returns></returns>
-        public override float EvaluateModelOnly(string srcModelPath, string tgtModelPath)
+        public override float EvaluateModelOnly(string ModelPath, string extrapath = null)
         {
             return 0;
         }
 
-        void LoadModel(string queryModelFile, ref DNN queryModel, string docModelFile, ref DNN docModel, bool allocateStructureFromEmpty)
+        void LoadModel(string queryModelFile, ref DNN model, bool allocateStructureFromEmpty)
         {
             if (allocateStructureFromEmpty)
             {
-                queryModel = new DNN(queryModelFile);
-                if (ParameterSetting.IS_SHAREMODEL)
-                {
-                    docModel = queryModel;
-                }
-                else
-                {
-                    docModel = new DNN(docModelFile);
-                }
+                model = new DNN(queryModelFile);
             }
             else
             {
-                queryModel.Model_Load(queryModelFile, false);
-                if (ParameterSetting.IS_SHAREMODEL)
-                {
-                    docModel = queryModel;
-                }
-                else
-                {
-                    docModel.Model_Load(docModelFile, false);
-                }
+                model.Model_Load(queryModelFile, false);
             }
-            ParameterSetting.FEATURE_DIMENSION_QUERY = queryModel.neurallayers[0].Number;
-            ParameterSetting.FEATURE_DIMENSION_DOC = docModel.neurallayers[0].Number;
+            //ParameterSetting.FEATURE_DIMENSION_QUERY = queryModel.neurallayers[0].Number;
+            //ParameterSetting.FEATURE_DIMENSION_DOC = docModel.neurallayers[0].Number;
         }
 
         public override void ModelInit_FromConfig()
         {
             if (!ParameterSetting.ISSEED)
             {
-                DNN_Query = new DNN(ParameterSetting.FEATURE_DIMENSION_QUERY,
-                    ParameterSetting.SOURCE_LAYER_DIM,
-                    ParameterSetting.SOURCE_ACTIVATION,
-                    ParameterSetting.SOURCE_LAYERWEIGHT_SIGMA,
-                    ParameterSetting.SOURCE_ARCH,
-                    ParameterSetting.SOURCE_ARCH_WIND,
+                dnn = new DNN(ParameterSetting.FIXED_FEATURE_DIM,
+                    ParameterSetting.LAYER_DIM,
+                    ParameterSetting.ACTIVATION,
+                    ParameterSetting.LAYERWEIGHT_SIGMA,
+                    ParameterSetting.ARCH,
+                    ParameterSetting.ARCH_WND,
+                    ParameterSetting.CONTEXT_DIM,
+                    ParameterSetting.WORD_NUM,
+                    ParameterSetting.CONTEXT_NUM,
+                    ParameterSetting.ARCH_WNDS,
+                    ParameterSetting.ARCH_FMS,
                     false);
 
-                if (ParameterSetting.IS_SHAREMODEL)
-                {
-                    DNN_Doc = DNN_Query;
-                }
-                else
-                {
-                    DNN_Doc = new DNN(ParameterSetting.FEATURE_DIMENSION_DOC,
-                        ParameterSetting.TARGET_LAYER_DIM,
-                        ParameterSetting.TARGET_ACTIVATION,
-                        ParameterSetting.TARGET_LAYERWEIGHT_SIGMA,
-                        ParameterSetting.TARGET_ARCH,
-                        ParameterSetting.TARGET_ARCH_WIND,
-                        false);
-                }
+                dnn.Init();
 
-                DNN_Query.Init();
-
-                if (!ParameterSetting.IS_SHAREMODEL)
-                {
-                    if (ParameterSetting.MIRROR_INIT)
-                    {
-                        DNN_Doc.Init(DNN_Query);
-                    }
-                    else
-                    {
-                        DNN_Doc.Init();
-                    }
-                }
-                ParameterSetting.FEATURE_DIMENSION_QUERY = DNN_Query.neurallayers[0].Number;
-                ParameterSetting.FEATURE_DIMENSION_DOC = DNN_Doc.neurallayers[0].Number;
+                //ParameterSetting.FEATURE_DIMENSION_QUERY = DNN_Query.neurallayers[0].Number;
+                //ParameterSetting.FEATURE_DIMENSION_DOC = DNN_Doc.neurallayers[0].Number;
             }
             else
             {
-                LoadModel(ParameterSetting.SEEDMODEL1, ref DNN_Query, ParameterSetting.SEEDMODEL2, ref DNN_Doc, true);
+                LoadModel(ParameterSetting.SEEDMODEL1, ref dnn, true);
             }
 
-            Program.Print("Source Neural Network Structure " + DNN_Query.DNN_Descr());
-            Program.Print("Target Neural Network Structure " + DNN_Doc.DNN_Descr());
-            Program.Print("Feature Num Query " + ParameterSetting.FEATURE_DIMENSION_QUERY.ToString());
-            Program.Print("Feature Num Doc " + ParameterSetting.FEATURE_DIMENSION_DOC.ToString());
-            Program.Print("Sharing Model " + ParameterSetting.IS_SHAREMODEL.ToString());
-            Program.Print("Mirror Init Model " + ParameterSetting.MIRROR_INIT.ToString());
+            Program.Print("Neural Network Structure " + dnn.DNN_Descr());
             Program.Print("Math Lib " + ParameterSetting.MATH_LIB.ToString());
             if (ParameterSetting.MATH_LIB == MathLibType.cpu)
             {
@@ -352,8 +301,8 @@ namespace DSMlib
         }
         public override void Training()
         {
-            Init(DNN_Query, DNN_Doc);
-            DNN dnn_query_backup = null, dnn_doc_backup = null;
+            Init();
+            DNN dnn_backup = null;
             Program.Print("Starting DNN Learning!");
 
             float trainingLoss = 0;
@@ -364,7 +313,7 @@ namespace DSMlib
             int lastRunStopIter = -1;
             for (int iter = 0; iter <= ParameterSetting.MAX_ITER; ++iter)
             {
-                if (!File.Exists(ParameterSetting.MODEL_PATH + "_QUERY_ITER" + iter.ToString()))
+                if (!File.Exists(ParameterSetting.MODEL_PATH + "_ITER=" + iter.ToString()))
                 {
                     break;
                 }
@@ -375,14 +324,10 @@ namespace DSMlib
             {
                 Program.Print("Initialization (Iter 0)");
                 Program.Print("Saving models ...");
-                DNN_Query.CopyOutFromCuda();
-                Tuple<string, string> dssmModelPaths = ComposeDSSMModelPaths(0);
-                DNN_Query.Model_Save(dssmModelPaths.Item1);
-                if (!ParameterSetting.IS_SHAREMODEL)
-                {
-                    DNN_Doc.CopyOutFromCuda();
-                    DNN_Doc.Model_Save(dssmModelPaths.Item2);
-                }
+                dnn.CopyOutFromCuda();
+                string dssmModelPath = ComposeDSSMModelPaths(0);
+                dnn.Model_Save(dssmModelPath);
+                
                 if (ParameterSetting.ISVALIDATE)
                 {
                     Program.Print("Start validation process ...");
@@ -392,11 +337,11 @@ namespace DSMlib
                     }
                     else
                     {
-                        VALIDATION_Eval = EvaluateModelOnly(dssmModelPaths.Item1, dssmModelPaths.Item2);
+                        VALIDATION_Eval = EvaluateModelOnly(dssmModelPath);
                     }
                     Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
                 }
-                File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER" + 0.ToString(), LearningParameters.lr_mid.ToString());
+                File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + 0.ToString(), LearningParameters.lr_mid.ToString());
                 lastRunStopIter = 0;
             }
             else
@@ -407,12 +352,8 @@ namespace DSMlib
                     for (int iter = 0; iter <= lastRunStopIter; ++iter)
                     {
                         Program.Print("Loading from previously trained Iter " + iter.ToString());
-                        Tuple<string, string> dssmModelPaths = ComposeDSSMModelPaths(iter);
-                        LoadModel(dssmModelPaths.Item1,
-                            ref DNN_Query,
-                            dssmModelPaths.Item2,
-                            ref DNN_Doc,
-                            false);
+                        string dssmModelPath = ComposeDSSMModelPaths(iter);
+                        LoadModel(dssmModelPath, ref dnn, false);
                         Program.Print("Start validation process ...");
                         if (!ParameterSetting.VALIDATE_MODEL_ONLY)
                         {
@@ -420,12 +361,12 @@ namespace DSMlib
                         }
                         else
                         {
-                            VALIDATION_Eval = EvaluateModelOnly(dssmModelPaths.Item1, dssmModelPaths.Item2);
+                            VALIDATION_Eval = EvaluateModelOnly(dssmModelPath);
                         }
                         Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
-                        if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE" + iter.ToString()))
+                        if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()))
                         {
-                            LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE" + iter.ToString()));
+                            LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()));
                         }
                     }
                 }
@@ -434,14 +375,11 @@ namespace DSMlib
                     //// just load the last iteration
                     int iter = lastRunStopIter;
                     Program.Print("Loading from previously trained Iter " + iter.ToString());
-                    LoadModel(ParameterSetting.MODEL_PATH + "_QUERY_ITER" + iter.ToString(),
-                        ref DNN_Query,
-                        ParameterSetting.MODEL_PATH + "_DOC_ITER" + iter.ToString(),
-                        ref DNN_Doc,
-                        false);
-                    if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE" + iter.ToString()))
+                    string dssmModelPath = ComposeDSSMModelPaths(iter);
+                    LoadModel(dssmModelPath, ref dnn, false);
+                    if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()))
                     {
-                        LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE" + iter.ToString()));
+                        LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()));
                     }
                 }
             }
@@ -449,22 +387,18 @@ namespace DSMlib
             //// Clone to backup models
             if (ParameterSetting.ISVALIDATE)
             {
-                dnn_query_backup = (DNN)DNN_Query.CreateBackupClone();
-                if (!ParameterSetting.IS_SHAREMODEL)
-                {
-                    dnn_doc_backup = (DNN)DNN_Doc.CreateBackupClone();
-                }
+                dnn_backup = dnn.CreateBackupClone();
             }
 
             if (ParameterSetting.NOTrain)
             {
                 return;
             }
-            Program.Print("total query sample number : " + TriStream.qstream.total_Batch_Size.ToString());
-            Program.Print("total doc sample number : " + TriStream.dstream.total_Batch_Size.ToString());
-            Program.Print("Training batches: " + TriStream.qstream.BATCH_NUM.ToString());
+            Program.Print("total triplet instance number : " + TriStream.q0stream.nLine.ToString());
+            //Program.Print("total doc sample number : " + TriStream.dstream.total_Batch_Size.ToString());
+            Program.Print("Training batches: " + TriStream.q0stream.BATCH_NUM.ToString());
             Program.Print("Learning Objective : " + ParameterSetting.OBJECTIVE.ToString());
-            LearningParameters.total_doc_num = TriStream.dstream.total_Batch_Size;
+            LearningParameters.total_doc_num = TriStream.q0stream.nLine;
 
             previous_devEval = VALIDATION_Eval;
 
@@ -491,12 +425,12 @@ namespace DSMlib
                 /// adjust learning rate here.
                 TriStream.Init_Batch();
                 trainingLoss = 0;
-                LearningParameters.neg_static_sample = false;
+                //LearningParameters.neg_static_sample = false;
                 mmindex = 0;                
 
-                while (TriStream.Next_Batch(SrcNorm, TgtNorm))
+                while (TriStream.Next_Batch())
                 {
-                    trainingLoss += feedstream_batch(TriStream.GPU_qbatch, TriStream.GPU_dbatch, true, TriStream.srNCEProbDist);
+                    trainingLoss += feedstream_batch(new BatchSample_Input[] {TriStream.GPU_q0batch, TriStream.GPU_q1batch, TriStream.GPU_q2batch}, true);
                     mmindex += 1;
                     if (mmindex % 50 == 0)
                     {
@@ -506,15 +440,8 @@ namespace DSMlib
 
                 Program.Print("Training Loss : " + trainingLoss.ToString());
                 Program.Print("Learning Rate : " + (LearningParameters.learning_rate.ToString()));
-                Tuple<string, string> dssmModelPaths = ComposeDSSMModelPaths(iter);
-                Program.Print("Saving models ...");
-                DNN_Query.CopyOutFromCuda();
-                DNN_Query.Model_Save(dssmModelPaths.Item1);
-                if (!ParameterSetting.IS_SHAREMODEL)
-                {
-                    DNN_Doc.CopyOutFromCuda();
-                    DNN_Doc.Model_Save(dssmModelPaths.Item2);
-                }
+                
+                
 
                 if (ParameterSetting.ISVALIDATE)
                 {
@@ -525,7 +452,8 @@ namespace DSMlib
                     }
                     else
                     {
-                        VALIDATION_Eval = EvaluateModelOnly(dssmModelPaths.Item1, dssmModelPaths.Item2);
+                        // not used
+                        VALIDATION_Eval = EvaluateModelOnly("");
                     }
                     Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
 
@@ -538,11 +466,7 @@ namespace DSMlib
                             LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.down_rate;
                         }
                         //// save model to backups
-                        dnn_query_backup.Init(DNN_Query);
-                        if (!ParameterSetting.IS_SHAREMODEL)
-                        {
-                            dnn_doc_backup.Init(DNN_Doc);
-                        }
+                        dnn_backup.Init(dnn);
                     }
                     else
                     {
@@ -552,30 +476,26 @@ namespace DSMlib
                         LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.reject_rate;
 
                         //// recover model from the last saved backup
-                        DNN_Query.Init(dnn_query_backup);
-                        if (!ParameterSetting.IS_SHAREMODEL)
-                        {
-                            DNN_Doc.Init(dnn_doc_backup);
-                        }
+                        dnn.Init(dnn_backup);
                     }
                 }
 
+                string dssmModelPath = ComposeDSSMModelPaths(iter);
+                Program.Print("Saving models ...");
+                dnn.CopyOutFromCuda();
+                dnn.Model_Save(dssmModelPath);
+
                 //// write the learning rate after this iter
-                File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER" + iter.ToString(), LearningParameters.lr_mid.ToString());
+                File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString(), LearningParameters.lr_mid.ToString());
 
                 Program.timer.Stop();
-                Program.Print("Training Runing Time : " + Program.timer.Elapsed.ToString());
+                Program.Print("Training Runing Time (Iter="+ iter.ToString() +") : " + Program.timer.Elapsed.ToString());
                 Program.Print("-----------------------------------------------------------");
             }
 
             //// Final save
-            DNN_Query.CopyOutFromCuda();
-            DNN_Query.Model_Save(ParameterSetting.MODEL_PATH + "_QUERY_DONE");
-            if (!ParameterSetting.IS_SHAREMODEL)
-            {
-                DNN_Doc.CopyOutFromCuda();
-                DNN_Doc.Model_Save(ParameterSetting.MODEL_PATH + "_DOC_DONE");
-            }
+            dnn.CopyOutFromCuda();
+            dnn.Model_Save(ParameterSetting.MODEL_PATH + "_Final");
                         
             //pstream.General_Train_Test(ParameterSetting.TRAIN_TEST_RATE);
             //dnn_train

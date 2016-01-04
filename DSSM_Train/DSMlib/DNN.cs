@@ -224,6 +224,27 @@ namespace DSMlib
             table.Init("lookupt", vecDim);
         }
 
+        public void Init(string wvfile)
+        {
+            FileStream mstream = new FileStream(wvfile, FileMode.Open, FileAccess.Read);
+            BinaryReader mreader = new BinaryReader(mstream);
+            int wordnum = mreader.ReadInt32();
+            int dim = mreader.ReadInt32();
+            if (wordnum != this.count || dim != this.vecDim)
+            {
+                mreader.Close();
+                mstream.Close();
+                throw new Exception("Inconsistent word number or word vector dimension encountered!");
+            }
+            int ltlength = dim * wordnum;
+            for (int mm = 0; mm < ltlength; mm++)
+                Back_LookupTable[mm] = mreader.ReadSingle();
+            table.CopyIntoCuda();
+
+            mreader.Close();
+            mstream.Close();
+        }
+
         public void Init(float wei_scale, float wei_bias)
         {
             table.Init(wei_scale, wei_bias);
@@ -658,7 +679,7 @@ namespace DSMlib
             return result;
         }
 
-        public DNN(int featureSize, int[] layerDim, int[] activation, float[] sigma, int[] arch, int[] wind, int contextSize, int wordNum, int contextNum, int[] wndN, int[] fmN, bool backupOnly)
+        public DNN(int featureSize, int[] layerDim, int[] activation, float[] sigma, int[] arch, int[] wind, int contextDim, int wordNum, int contextNum, int[] wndN, int[] fmN, bool backupOnly)
         {
             NeuralLayer inputlayer = new NeuralLayer(featureSize);
             neurallayers.Add(inputlayer);
@@ -678,7 +699,7 @@ namespace DSMlib
                 }
                 else if (tp == N_Type.Composite_Full)
                 {
-                    NeuralLayer extrain = new NeuralLayer(contextSize);
+                    NeuralLayer extrain = new NeuralLayer(contextDim);
                     link = new NeuralLink(neurallayers[i], neurallayers[i + 1], (A_Func)activation[i], 0, sigma[i], tp, wind[i], backupOnly, null, null, extrain);
                 }
                 else
@@ -688,7 +709,7 @@ namespace DSMlib
 
             // Construct LT
             wordLT = new LookupTab(featureSize, wordNum, backupOnly);
-            contextLT = new LookupTab(contextSize, contextNum, backupOnly);
+            contextLT = new LookupTab(contextDim, contextNum, backupOnly);
         }
         
         public void Init()
@@ -697,7 +718,11 @@ namespace DSMlib
             {
                 neurallinks[i].Init();
             }
-            wordLT.Init();
+            if (ParameterSetting.WORDLT_INIT == null || !File.Exists(ParameterSetting.WORDLT_INIT))
+                wordLT.Init();
+            else
+                wordLT.Init(ParameterSetting.WORDLT_INIT);
+
             contextLT.Init();
         }
 

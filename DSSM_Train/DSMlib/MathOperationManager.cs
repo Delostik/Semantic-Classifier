@@ -9,7 +9,7 @@ namespace DSMlib
     interface IMathOperationManager
     {
         /*----------  Mainly used in forward activation, computing linear transformations  --------------*/
-        void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize);
+        //void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize);
         void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize) ;
         void MultiConv_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes);
         void Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, int winSize);
@@ -50,7 +50,7 @@ namespace DSMlib
         void Deriv_Rectified(CudaPieceFloat errorDeriv, CudaPieceFloat output, int batchsize, int inputDimension);
 
         /*----------  Mainly used in backward propagation, computing weight derivative  --------------*/
-        void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize);
+        //void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize);
         void Convolution_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension);
         void MultiConv_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para);
         void MultiConv_Compute_WVDERIV(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, CudaPieceFloat weight, int batchsize, int outputDimension, CudaPieceFloat inputDeriv, int inputDimension, CudaPieceInt winsizes, CudaPieceInt fmsizes);
@@ -63,7 +63,7 @@ namespace DSMlib
         void Matrix_Add_REAL(CudaPieceFloat matrix, CudaPieceFloat updates, int inputDimension, int outputDimnsion);
 
         /*----------  Mainly used in backward propagation in MultiRegression Task --------------*/
-        void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension);
+        //void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension);
 
         void Zero(CudaPieceFloat matrix, int size);
 
@@ -138,24 +138,24 @@ namespace DSMlib
     class CudaMathOperation : IMathOperationManager
     {
 
-        public void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize)
-        {
-            Cudalib.SEQ_Sparse_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Seg_Idx, data.Seg_Margin, data.Seg_Len, data.segsize, data.Fea_Idx, data.Fea_Value, data.elementsize,
-                                        weight.CudaPtr, output.CudaPtr, inputDimension, outputDimension, winSize);
+        //public void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize)
+        //{
+        //    Cudalib.SEQ_Sparse_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Seg_Idx, data.Seg_Margin, data.Seg_Len, data.segsize, data.Fea_Idx, data.Fea_Value, data.elementsize,
+        //                                weight.CudaPtr, output.CudaPtr, inputDimension, outputDimension, winSize);
                     
-        }
+        //}
 
 
         public void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize)
         {
-            Cudalib.Convolution_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Word_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
+            Cudalib.Convolution_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
                                         weight.CudaPtr, layerPoolingOutput.CudaPtr, inputDimension, outputDimension, winSize);
 
         }
 
         public void MultiConv_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes)
         {
-            Cudalib.MultiConv_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Word_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
+            Cudalib.MultiConv_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
                                         weight.CudaPtr, layerPoolingOutput.CudaPtr, inputDimension, outputDimension, wndSizes.CudaPtr, fmSizes.CudaPtr);
 
         }
@@ -259,11 +259,11 @@ namespace DSMlib
         {
             Cudalib.Deriv_Dis(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m, margin);
         }
-        void Deriv_Dis_Linear(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin)
+        public void Deriv_Dis_Linear(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin)
         {
             Cudalib.Deriv_Dis_Linear(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m, margin);
         }
-        void Deriv_Dis_Rectified(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin, float eps)
+        public void Deriv_Dis_Rectified(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin, float eps)
         {
             Cudalib.Deriv_Dis_Rectified(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m, margin, eps);
         }
@@ -319,11 +319,11 @@ namespace DSMlib
         }
 
 
-        public void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize)
-        {
-            Cudalib.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch.Sample_Idx, input_batch.batchsize, input_batch.Seg_Idx, input_batch.Seg_Margin, input_batch.Seg_Len, input_batch.segsize, input_batch.Fea_Idx, input_batch.Fea_Value, input_batch.elementsize,
-                               weightDeriv.CudaPtr, upperOutputErrorDeriv.CudaPtr, inputDimension, outputDimension, winSize);
-        }
+        //public void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize)
+        //{
+        //    Cudalib.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch.Sample_Idx, input_batch.batchsize, input_batch.Seg_Idx, input_batch.Seg_Margin, input_batch.Seg_Len, input_batch.segsize, input_batch.Fea_Idx, input_batch.Fea_Value, input_batch.elementsize,
+        //                       weightDeriv.CudaPtr, upperOutputErrorDeriv.CudaPtr, inputDimension, outputDimension, winSize);
+        //}
 
 
         public void Convolution_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension)
@@ -355,7 +355,7 @@ namespace DSMlib
                         batchsize, inputDimension, outputDimension);
         }
 
-        public void Matrix_Aggragate(CudaPieceFloat a1, CudaPieceFloat a2, CudaPieceFloat a3,, CudaPieceFloat b, int batchsize, int m)
+        public void Matrix_Aggragate(CudaPieceFloat a1, CudaPieceFloat a2, CudaPieceFloat a3, CudaPieceFloat b, int batchsize, int m)
         {
             Cudalib.Matrix_Aggragate(a1.CudaPtr, a2.CudaPtr, a3.CudaPtr, b.CudaPtr, batchsize, m);
         }
@@ -375,10 +375,10 @@ namespace DSMlib
             Cudalib.Matrix_Add_REAL(matrix.CudaPtr, updates.CudaPtr, inputDimension, outputDimnsion);
         }
 
-        public void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension)
-        {
-            Cudalib.Sparse2Dense_Matrix(data.Seg_Idx, data.Fea_Idx, data.Fea_Value, matrix.CudaPtr, batchsize, outputDimension);
-        }
+        //public void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension)
+        //{
+        //    Cudalib.Sparse2Dense_Matrix(data.Seg_Idx, data.Fea_Idx, data.Fea_Value, matrix.CudaPtr, batchsize, outputDimension);
+        //}
 
 
         public void Cosine_Similarity_EX_Full(CudaPieceFloat a, CudaPieceFloat b, CudaPieceInt neg_list, CudaPieceFloat c, int nTrial, int BATCHSIZE,
@@ -520,11 +520,11 @@ namespace DSMlib
                 inver_neg_value.MemPtr, nTrial, BATCHSIZE, batchsize, dimension, mweight.MemPtr, start, keep);
         }
 
-        public void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize)
-        {
-            BasicMathlib.SEQ_Sparse_Matrix_Multiply_INTEX(data.Sample_Idx_Mem, data.batchsize, data.Seg_Idx_Mem, data.Seg_Margin_Mem, data.Seg_Len_Mem, data.segsize, data.Fea_Idx_Mem, data.Fea_Value_Mem, data.elementsize,
-                                        weight.MemPtr, output.MemPtr, inputDimension, outputDimension, winSize);
-        }
+        //public void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize)
+        //{
+        //    BasicMathlib.SEQ_Sparse_Matrix_Multiply_INTEX(data.Sample_Idx_Mem, data.batchsize, data.Seg_Idx_Mem, data.Seg_Margin_Mem, data.Seg_Len_Mem, data.segsize, data.Fea_Idx_Mem, data.Fea_Value_Mem, data.elementsize,
+        //                                weight.MemPtr, output.MemPtr, inputDimension, outputDimension, winSize);
+        //}
 
         public void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize)
         {
@@ -540,7 +540,7 @@ namespace DSMlib
 
         }
 
-        public void Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension)
+        public void Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, int winSize)
         {
             // not implemented
             //BasicMathlib.Max_Pooling(layerPoolingOutput.MemPtr, data.Sample_Idx_Mem, data.batchsize, output.MemPtr, layerMaxPooling_Index.MemPtr, outputDimension);
@@ -624,11 +624,11 @@ namespace DSMlib
         {
             //Cudalib.Deriv_Dis(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m);
         }
-        void Deriv_Dis_Linear(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin)
+        public void Deriv_Dis_Linear(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin)
         {
             //Cudalib.Deriv_Dis_Linear(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m);
         }
-        void Deriv_Dis_Rectified(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin, float eps)
+        public void Deriv_Dis_Rectified(CudaPieceFloat s1deriv, CudaPieceFloat s2deriv, CudaPieceFloat s3deriv, CudaPieceFloat s1, CudaPieceFloat s2, CudaPieceFloat s3, CudaPieceFloat dis, int batchsize, int m, float margin, float eps)
         {
             //Cudalib.Deriv_Dis_Rectified(s1deriv.CudaPtr, s2deriv.CudaPtr, s3deriv.CudaPtr, s1.CudaPtr, s2.CudaPtr, s3.CudaPtr, dis.CudaPtr, batchsize, m, eps);
         }
@@ -683,11 +683,11 @@ namespace DSMlib
             BasicMathlib.Deriv_Rectified(errorDeriv.MemPtr, output.MemPtr, batchsize, inputDimension);
         }
 
-        public void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize)
-        {
-            BasicMathlib.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch.Sample_Idx_Mem, input_batch.batchsize, input_batch.Seg_Idx_Mem, input_batch.Seg_Margin_Mem, input_batch.Seg_Len_Mem, input_batch.segsize, input_batch.Fea_Idx_Mem, input_batch.Fea_Value_Mem, input_batch.elementsize,
-                               weightDeriv.MemPtr, upperOutputErrorDeriv.MemPtr, inputDimension, outputDimension, winSize);
-        }
+        //public void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize)
+        //{
+        //    BasicMathlib.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch.Sample_Idx_Mem, input_batch.batchsize, input_batch.Seg_Idx_Mem, input_batch.Seg_Margin_Mem, input_batch.Seg_Len_Mem, input_batch.segsize, input_batch.Fea_Idx_Mem, input_batch.Fea_Value_Mem, input_batch.elementsize,
+        //                       weightDeriv.MemPtr, upperOutputErrorDeriv.MemPtr, inputDimension, outputDimension, winSize);
+        //}
 
         public void Convolution_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension)
         {
@@ -735,10 +735,10 @@ namespace DSMlib
             // not implemented
         }
 
-        public void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension)
-        {
-            BasicMathlib.Sparse2Dense_Matrix(data.Seg_Idx_Mem, data.Fea_Idx_Mem, data.Fea_Value_Mem, matrix.MemPtr, batchsize, outputDimension);
-        }
+        //public void Sparse2Dense_Matrix(BatchSample_Input data, CudaPieceFloat matrix, int batchsize, int outputDimension)
+        //{
+        //    BasicMathlib.Sparse2Dense_Matrix(data.Seg_Idx_Mem, data.Fea_Idx_Mem, data.Fea_Value_Mem, matrix.MemPtr, batchsize, outputDimension);
+        //}
 
         public void Zero(CudaPieceFloat matrix, int size)
         {

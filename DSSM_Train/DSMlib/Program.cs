@@ -71,7 +71,6 @@ namespace DSMlib
 
                 timer.Reset();
                 timer.Start();
-                Print("Loading training data ....");
 
                 if (ParameterSetting.CuBlasEnable)
                 {
@@ -81,21 +80,20 @@ namespace DSMlib
 
                 DNN_Train dnnTrain = null;
 
-                /// 1. loading training dataset.
+                Print("Loading training data ....");
+               /// 1. loading training dataset.
                 switch (ParameterSetting.OBJECTIVE)
-                {
-                    case ObjectiveType.MMI:
-                    case ObjectiveType.MXE:
-                    case ObjectiveType.NCE:
-                    case ObjectiveType.NCE2:
-                    case ObjectiveType.PAIRRANK: 
-                        dnnTrain = new DSSM_Train();
-                        dnnTrain.LoadTrainData(new string[] { ParameterSetting.QFILE, ParameterSetting.DFILE });
+                {                 
+                    case ObjectiveType.WEAKRANK:
+                        dnnTrain = new Weak_DNNTrain();
+                        string[] trainfiles = new string[3] { ParameterSetting.QFILE_0, ParameterSetting.QFILE_1, ParameterSetting.QFILE_2 };
+                        dnnTrain.LoadTrainData(trainfiles);
                         if (ParameterSetting.ISVALIDATE)
                         {
                             if (!ParameterSetting.VALIDATE_MODEL_ONLY)
                             {
-                                dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR });
+                                // under construction
+                                //dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR });
                             }
                             else
                             {
@@ -103,31 +101,15 @@ namespace DSMlib
                             }
                         }
                         break;
-                    case ObjectiveType.MULTIREGRESSION : 
-                        dnnTrain = new MultiRegression_DNN_Train();
-                        dnnTrain.LoadTrainData(new string[]{ParameterSetting.QFILE, ParameterSetting.DFILE});
-                        if (ParameterSetting.ISVALIDATE)
-                        {
-                            dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE });
-                        }
-                        break;
-                    case ObjectiveType.PAIRCLASSIFICATION:
-                        dnnTrain = new PairClassification_DNN_Train();
-                        dnnTrain.LoadTrainData(new string[] { ParameterSetting.QFILE, ParameterSetting.DFILE, ParameterSetting.LFILE });
-                        if (ParameterSetting.ISVALIDATE)
-                        {
-                            dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR });
-                        }
-                        break;
-                    case ObjectiveType.PAIRREGRESSION_MSE:
-                    case ObjectiveType.PAIRREGRESSION_LR:
-                        dnnTrain = new PairRegression_DNN_Train();
-                        dnnTrain.LoadTrainData(new string[] { ParameterSetting.QFILE, ParameterSetting.DFILE, ParameterSetting.LFILE });
-                        if (ParameterSetting.ISVALIDATE)
-                        {
-                            dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR });
-                        }
-                        break;
+                    case ObjectiveType.SOFTMAX : 
+                        // under construction
+                        //dnnTrain = new MultiRegression_DNN_Train();
+                        //dnnTrain.LoadTrainData(new string[]{ParameterSetting.QFILE, ParameterSetting.DFILE});
+                        //if (ParameterSetting.ISVALIDATE)
+                        //{
+                        //    dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE });
+                        //}
+                        break;                    
                 }
                 dnnTrain.ModelInit_FromConfig();
                 dnnTrain.Training();

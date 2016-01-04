@@ -47,6 +47,8 @@ namespace DSMlib
         public static int[] ARCH_FMS = { 200, 200, 200 };
 
         public static int CONTEXT_DIM = 50;
+        public static int CONTEXT_NUM = 50;
+        public static int WORD_NUM = 200000;
         public static float BIAS_WEIGHT = 0;
 
         //public static int FEATURE_DIMENSION_QUERY = 0;
@@ -127,6 +129,8 @@ namespace DSMlib
         /// 
         /// </summary>
         public static bool UpdateBias = false;
+
+        public static string WORDLT_INIT = null;
 
         public static void LoadArgs(string conf_filename)
         {
@@ -217,6 +221,10 @@ namespace DSMlib
                 {
                     LFILE = cmds[1];
                 }
+                else if (cmds[0].Equals("WORDLT_INIT"))
+                {
+                    WORDLT_INIT = cmds[1];
+                }
                 else if (cmds[0].Equals("Q0FILE"))
                 {
                     QFILE_0 = cmds[1];
@@ -244,6 +252,14 @@ namespace DSMlib
                 else if (cmds[0].Equals("CONTEXT_DIM"))
                 {
                     CONTEXT_DIM = int.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("CONTEXT_NUM"))
+                {
+                    CONTEXT_NUM = int.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("WORD_NUM"))
+                {
+                    WORD_NUM = int.Parse(cmds[1]);
                 }
                 else if (cmds[0].Equals("LOGFILE"))
                 {
