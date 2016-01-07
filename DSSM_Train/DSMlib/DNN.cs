@@ -799,7 +799,7 @@ namespace DSMlib
             this.isWordInput = isWordInput;
             
             inputDerivs = new CudaPieceFloat[3];
-            tabUpdate = new CudaPieceFloat(Dim * Count, false, true);
+            tabUpdate = new CudaPieceFloat(Dim * Count, ParameterSetting.CheckGrad ? true : false, true);
             if (isWordInput)
             {
                 for (int i = 0; i < inputDerivs.Length; i++)
@@ -1038,8 +1038,8 @@ namespace DSMlib
             else
                 totalweightsize = neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize;
 
-            weightDeriv = new CudaPieceFloat(totalweightsize, false, true);
-            biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
+            weightDeriv = new CudaPieceFloat(totalweightsize, ParameterSetting.CheckGrad ? true : false, true);
+            biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, ParameterSetting.CheckGrad ? true : false, true);
 
             weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
             biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
@@ -1301,6 +1301,12 @@ namespace DSMlib
                                 neurallayers[1].Number, wordLT.InputDeriv[i], neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.N_Winsize);
                 }
             }
+
+            if (ParameterSetting.CheckGrad)
+            {
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, 1);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, 1);
+            }
         }
                 
         /// <summary>
@@ -1317,8 +1323,8 @@ namespace DSMlib
             for (int q = 0; q < 3; q++)
                 backward_calculate_layerout_deriv(input_batches[q], q);
             // step 2, compute the derivatives for the connections of each neural link layer
-            backward_calculate_weight_deriv(input_batches);
             summarizeUnique(input_batches);
+            backward_calculate_weight_deriv(input_batches);
         }
 
         /// <summary>

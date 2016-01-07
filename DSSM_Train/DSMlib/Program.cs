@@ -52,7 +52,7 @@ namespace DSMlib
         {
             try
             {
-                ParameterSetting.LoadArgs("cdssm.config.txt");
+                ParameterSetting.LoadArgs("config.txt");
 
                 ParameterSetting.LoadArgs(args[0]);
                 string logDirecotry = new FileInfo(ParameterSetting.Log_FileName).Directory.FullName;
@@ -69,14 +69,25 @@ namespace DSMlib
                     Directory.CreateDirectory(modelDirectory);
                 }
 
-                timer.Reset();
-                timer.Start();
+                //timer.Reset();
+                //timer.Start();
 
                 if (ParameterSetting.CuBlasEnable)
                 {
                     Cudalib.CUBLAS_Init();
                 }
                 //Load_Train_PairData(ParameterSetting.QFILE, ParameterSetting.DFILE);
+
+                if (ParameterSetting.CheckGrad)
+                {
+                    CheckGradient cg = new CheckGradient();
+                    cg.initDNN();
+                    cg.initRun();
+                    cg.CheckGrad();
+                    if (ParameterSetting.CuBlasEnable)
+                        Cudalib.CUBLAS_Destroy();
+                    return;
+                }
 
                 DNN_Train dnnTrain = null;
 

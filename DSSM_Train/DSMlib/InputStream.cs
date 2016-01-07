@@ -616,20 +616,20 @@ namespace DSMlib
                 ParameterSetting.FEATURE_DEMENSION_Q1 = q1stream.Feature_Size;
                 ParameterSetting.FEATURE_DEMENSION_Q2 = q2stream.Feature_Size;
 
-                if (ParameterSetting.MIRROR_INIT)
-                {
-                    int featureDim = Math.Max(ParameterSetting.FEATURE_DEMENSION_Q0, ParameterSetting.FEATURE_DEMENSION_Q1);
-                    featureDim = Math.Max(featureDim, ParameterSetting.FEATURE_DEMENSION_Q2);
+                //if (ParameterSetting.MIRROR_INIT)
+                //{
+                //    int featureDim = Math.Max(ParameterSetting.FEATURE_DEMENSION_Q0, ParameterSetting.FEATURE_DEMENSION_Q1);
+                //    featureDim = Math.Max(featureDim, ParameterSetting.FEATURE_DEMENSION_Q2);
 
-                    Program.Print(string.Format("Warning! MIRROR_INIT is turned on. Make sure two input sides are on the same feature space, and two models have exactly the same structure. Originally Feature Num Query {0}, Feature Num Doc {1}. Now both aligned to {2}",
-                        ParameterSetting.FEATURE_DEMENSION_Q0, 
-                        ParameterSetting.FEATURE_DEMENSION_Q1, 
-                        ParameterSetting.FEATURE_DEMENSION_Q2, 
-                        featureDim));
-                    ParameterSetting.FEATURE_DEMENSION_Q0 = featureDim;
-                    ParameterSetting.FEATURE_DEMENSION_Q1 = featureDim;
-                    ParameterSetting.FEATURE_DEMENSION_Q2 = featureDim;
-                }
+                //    Program.Print(string.Format("Warning! MIRROR_INIT is turned on. Make sure two input sides are on the same feature space, and two models have exactly the same structure. Originally Feature Num Query {0}, Feature Num Doc {1}. Now both aligned to {2}",
+                //        ParameterSetting.FEATURE_DEMENSION_Q0, 
+                //        ParameterSetting.FEATURE_DEMENSION_Q1, 
+                //        ParameterSetting.FEATURE_DEMENSION_Q2, 
+                //        featureDim));
+                //    ParameterSetting.FEATURE_DEMENSION_Q0 = featureDim;
+                //    ParameterSetting.FEATURE_DEMENSION_Q1 = featureDim;
+                //    ParameterSetting.FEATURE_DEMENSION_Q2 = featureDim;
+                //}
             }
         }
 

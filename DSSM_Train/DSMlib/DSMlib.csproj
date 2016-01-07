@@ -84,6 +84,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BasicMathLib.cs" />
+    <Compile Include="CheckGradient.cs" />
     <Compile Include="Cudalib.cs" />
     <Compile Include="CudaPiece.cs" />
     <Compile Include="DNN.cs" />

@@ -22,9 +22,10 @@ namespace DSMlib
     {
 
         // 下面这段是我加的
-        public static int FIXED_FEATURE_DIM = 300;  // 输入词向量的长度
+        public static int FIXED_FEATURE_DIM = 15;  // 输入词向量的长度
 
         public static bool CuBlasEnable = true;
+        public static bool CheckGrad = false;
 
         public static ObjectiveType OBJECTIVE = ObjectiveType.WEAKRANK; //0:weak supervison training; 1:classic supervised training
         //public static string NCE_PROB_FILE = "_null_"; //if NCE and probFile="_null_" then use uniform Prob(D), e.g., Prob(D) = 1/|D|
@@ -134,6 +135,8 @@ namespace DSMlib
 
         public static void LoadArgs(string conf_filename)
         {
+            if (!File.Exists(conf_filename))
+                return;
             FileStream mstream = new FileStream(conf_filename, FileMode.Open, FileAccess.Read);
             StreamReader mreader = new StreamReader(mstream);
             while (!mreader.EndOfStream)
@@ -177,6 +180,17 @@ namespace DSMlib
                     else
                     {
                         CuBlasEnable = false;
+                    }
+                }
+                else if (cmds[0].Equals("CHECK_GRADIENT"))
+                {
+                    if (int.Parse(cmds[1]) == 1)
+                    {
+                        CheckGrad = true;
+                    }
+                    else
+                    {
+                        CheckGrad = false;
                     }
                 }
                 else if (cmds[0].Equals("BATCHSIZE"))
