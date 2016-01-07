@@ -119,6 +119,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="config.txt" />
     <Content Include="Cudalib.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
