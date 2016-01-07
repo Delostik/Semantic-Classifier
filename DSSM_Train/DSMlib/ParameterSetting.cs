@@ -330,6 +330,28 @@ namespace DSMlib
                         i++;
                     }
                 }
+                else if (cmds[0].Equals("ARCH_FMSIZES"))
+                {
+                    string[] items = cmds[1].Split(',');
+                    ARCH_FMS = new int[items.Length];
+                    int i = 0;
+                    foreach (string s in items)
+                    {
+                        ARCH_FMS[i] = int.Parse(s);
+                        i++;
+                    }
+                }
+                else if (cmds[0].Equals("ARCH_WNDSIZES"))
+                {
+                    string[] items = cmds[1].Split(',');
+                    ARCH_WNDS = new int[items.Length];
+                    int i = 0;
+                    foreach (string s in items)
+                    {
+                        ARCH_WNDS[i] = int.Parse(s);
+                        i++;
+                    }
+                }
                 else if (cmds[0].Equals("LAYER_DIM"))
                 {
                     string[] items = cmds[1].Split(',');

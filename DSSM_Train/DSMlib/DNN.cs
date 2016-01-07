@@ -1304,8 +1304,8 @@ namespace DSMlib
 
             if (ParameterSetting.CheckGrad)
             {
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, 1);
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, 1);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, 1.0f);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, 1.0f);
             }
         }
                 
@@ -1378,17 +1378,17 @@ namespace DSMlib
             // update lookup tables
             if (momentum == 0)
             {
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(wordLT.Table, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, learning_rate);
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(contextLT.Table, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(wordLT.Table, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(contextLT.Table, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
             }
             else
             {
                 MathOperatorManager.GlobalInstance.Scale_Matrix(wordLT.TabUpdate, wordLT.Table.count, wordLT.Table.vecDim, momentum);
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].Word_Idx_Mem.Length, input_batches[1].Word_Idx_Mem.Length, wordLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
                 MathOperatorManager.GlobalInstance.Matrix_Add_REAL(wordLT.Table.table, wordLT.TabUpdate, wordLT.Table.count, wordLT.Table.vecDim);
 
                 MathOperatorManager.GlobalInstance.Scale_Matrix(contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim, momentum);
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].Fea_Mem.Length, input_batches[1].Fea_Mem.Length, contextLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
                 MathOperatorManager.GlobalInstance.Matrix_Add_REAL(contextLT.Table.table, contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim);
             }
 
@@ -1400,7 +1400,7 @@ namespace DSMlib
             int offset = 0;
             for (int i = 0; i < 3; i++)
             {
-                for (int j = 0; j < inputBatches[i].Word_Idx_Mem.Length; j++)
+                for (int j = 0; j < inputBatches[i].elementSize; j++)
                 {
                     int w = inputBatches[i].Word_Idx_Mem[j];
                     if (wordSum.ContainsKey(w))
@@ -1431,7 +1431,7 @@ namespace DSMlib
             offset = 0;
             for (int i = 0; i < 3; i++)
             {
-                for (int j = 0; j < inputBatches[i].Fea_Mem.Length; j++)
+                for (int j = 0; j < inputBatches[i].batchsize; j++)
                 {
                     int w = inputBatches[i].Fea_Mem[j];
                     if (wordSum.ContainsKey(w))

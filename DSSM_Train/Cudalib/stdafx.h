@@ -163,3 +163,5 @@ void cuda_Deriv_InnerProduct( float * q, float * d, float * dcq, float * dcd, fl
 void cuda_FillOut_Composite(float* data, uint32_t* feaIdx, float* compData, float* context, uint32_t d1, uint32_t d2, uint32_t batchsize, uint32_t direction);
 
 void cuda_Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
+void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);

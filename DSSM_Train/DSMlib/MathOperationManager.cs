@@ -148,14 +148,14 @@ namespace DSMlib
 
         public void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize)
         {
-            Cudalib.Convolution_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
+            Cudalib.Convolution_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.elementSize, wtab.LookupTable,
                                         weight.CudaPtr, layerPoolingOutput.CudaPtr, inputDimension, outputDimension, winSize);
 
         }
 
         public void MultiConv_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes)
         {
-            Cudalib.MultiConv_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.Word_Idx_Mem.Length, wtab.LookupTable,
+            Cudalib.MultiConv_Matrix_Multiply_INTEX(data.Sample_Idx, data.batchsize, data.Word_Idx, data.Seg_Margin, data.elementSize, wtab.LookupTable,
                                         weight.CudaPtr, layerPoolingOutput.CudaPtr, inputDimension, outputDimension, wndSizes.CudaPtr, fmSizes.CudaPtr);
 
         }
@@ -470,7 +470,7 @@ namespace DSMlib
 
         public void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
         {
-            Cudalib.Sparse_Update_Lookup(tabUpdate.CudaPtr, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr);
+            Cudalib.Sparse_Update_Lookup_Update(tabUpdate.CudaPtr, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr);
         }
     }
 

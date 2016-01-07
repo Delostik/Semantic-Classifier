@@ -1033,7 +1033,7 @@ void cuda_Convolution_Matrix_Product_INTEX(float * deriv1, int * maxpooling_inde
 {
 	int weightDim = Feature_Dimension * win_size;
 	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
-	dim3 block_tail((output_dimension + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK, (weightDim + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK);
+	dim3 block_tail((output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (weightDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 
 	cuda_convolution_matrix_product_INTEX<<<block_tail, thread_tail>>>(deriv1, maxpooling_index1, deriv2, maxpooling_index2, deriv3, maxpooling_index3, wordLT, Word_Index1, Word_Index2, Word_Index3, win_size,
 					batchsize, output_dimension, grad, Feature_Dimension, weightDim);
@@ -1079,7 +1079,7 @@ void cuda_MultiConv_Matrix_Product_INTEX(float * deriv1, int * maxpooling_index1
 {
 	int weightDim = Feature_Dimension * winsize;
 	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
-	dim3 block_tail((weightDim + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK, (fmsize + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK);
+	dim3 block_tail((weightDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (fmsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 
 	cuda_multiconv_matrix_product_INTEX<<<block_tail, thread_tail>>>(deriv1, maxpooling_index1, deriv2, maxpooling_index2, deriv3, maxpooling_index3, wordLT, Word_Index1, Word_Index2, Word_Index3, winsize,
 		batchsize, output_dimension, (grad + accu_para), Feature_Dimension, weightDim, fmsize, accu);	
@@ -1122,7 +1122,7 @@ void cuda_MultiConv_Compute_WVDERIV(float * deriv, int * maxpooling_index, float
 {
 	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
 	
-	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK, (batchsize + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (batchsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 
 	cuda_multiconv_compute_wvderiv<<<block_tail, thread_tail>>>(deriv, maxpooling_index, weight, batchsize, output_dimension, grad, Feature_Dimension, winsizes, fmsizes);
 
@@ -1156,7 +1156,7 @@ void cuda_Conv_Compute_WVDERIV(float * deriv, int * maxpooling_index, float * we
 {
 	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
 
-	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK, (batchsize + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (batchsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 
 	cuda_conv_compute_wvderiv<<<block_tail, thread_tail>>>(deriv, maxpooling_index, weight, batchsize, output_dimension, grad, Feature_Dimension, winsize);
 
@@ -2193,7 +2193,7 @@ __global__ void cuda_sparse_update_lookup(float * lookupt, int * Fea_ID, int * F
 		int colbegin = 0;
 		if (idy > 0)
 			colbegin = Fea_Idx[idy - 1];
-		float accu;
+		float accu = 0;
 		for (int t = colbegin; t < colend; t++)
 		{
 			int tidx = Seq[t];
@@ -2222,4 +2222,47 @@ void cuda_Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int
 	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 	int sq1sq2 = seq1size + seq2size;
 	cuda_sparse_update_lookup<<<block_tail, thread_tail>>>(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, sq1sq2, IDnum, Feature_Dimension, lr);
+}
+
+
+
+__global__ void cuda_sparse_update_lookup_update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int sq1sq2, int IDnum, int Feature_Dimension, float lr)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < Feature_Dimension && idy < IDnum)
+	{
+		int colend = Fea_Idx[idy];
+		int colbegin = 0;
+		if (idy > 0)
+			colbegin = Fea_Idx[idy - 1];
+		float accu = 0;
+		for (int t = colbegin; t < colend; t++)
+		{
+			int tidx = Seq[t];
+			if (tidx < seq1size)
+			{
+				accu += ltDeriv1[tidx*Feature_Dimension + idx];
+			}
+			else if (tidx < sq1sq2)
+			{
+				accu += ltDeriv2[(tidx - seq1size)*Feature_Dimension + idx];
+			}
+			else
+			{
+				accu += ltDeriv3[(tidx - sq1sq2)*Feature_Dimension + idx];
+			}
+		}
+		int wid = Fea_ID[idy];
+		int updatepos = wid*Feature_Dimension + idx;
+		lookupt_update[updatepos] = lookupt_update[updatepos] + lr * accu;
+	}
+}
+
+void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	int sq1sq2 = seq1size + seq2size;
+	cuda_sparse_update_lookup_update<<<block_tail, thread_tail >>>(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, sq1sq2, IDnum, Feature_Dimension, lr);
 }

@@ -11,6 +11,7 @@ namespace DSMlib
     public class BatchSample_Input : IDisposable
     {
         public int batchsize = ParameterSetting.BATCH_SIZE;
+        public int elementSize;
         CudaPieceInt word_Idx;
         CudaPieceInt sample_Idx;
         CudaPieceInt fea_Idx;
@@ -41,7 +42,8 @@ namespace DSMlib
 
         public void Load(BinaryReader mreader, int batchsize)
         {
-            int elementSize = mreader.ReadInt32();
+            this.batchsize = batchsize;
+            elementSize = mreader.ReadInt32();
             for (int i = 0; i < batchsize; i++)  //read sample index.
             {
                 Sample_Mem[i] = mreader.ReadInt32();

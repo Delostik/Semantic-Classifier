@@ -54,13 +54,14 @@ namespace DSMlib
             {
                 ParameterSetting.LoadArgs("config.txt");
 
-                ParameterSetting.LoadArgs(args[0]);
+                if (args != null && args.Length > 0)
+                    ParameterSetting.LoadArgs(args[0]);
                 string logDirecotry = new FileInfo(ParameterSetting.Log_FileName).Directory.FullName;
                 if (!Directory.Exists(logDirecotry))
                 {
                     Directory.CreateDirectory(logDirecotry);
                 }
-                log_stream = new FileStream(ParameterSetting.Log_FileName, FileMode.Append, FileAccess.Write);
+                log_stream = new FileStream(ParameterSetting.Log_FileName, FileMode.Create, FileAccess.Write);
                 log_writer = new StreamWriter(log_stream);
 
                 string modelDirectory = new FileInfo(ParameterSetting.MODEL_PATH).Directory.FullName;

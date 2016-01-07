@@ -467,4 +467,9 @@ DLLEXP void __stdcall Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * 
 	cuda_Sparse_Update_Lookup(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr);
 }
 
+DLLEXP void __stdcall Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)
+{
+	cuda_Sparse_Update_Lookup_Update(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr);
+}
+
 /************************************************************/

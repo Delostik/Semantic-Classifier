@@ -54,6 +54,7 @@ namespace DSMlib
         public void generateData(BatchSample_Input bat)
         {
             bat.batchsize = batchsize;
+            
             int epos = 0;
             for (int i = 0; i < batchsize; i++)
             {
@@ -71,6 +72,7 @@ namespace DSMlib
                 bat.Sample_Mem[i] = epos;
 
             }
+            bat.elementSize = epos;
             int[] context = randomFeaSequence();
             for (int i = 0; i < context.Length; i++)
                 bat.Fea_Mem[i] = context[i];
@@ -149,6 +151,8 @@ namespace DSMlib
 
         public void CheckGrad()
         {
+            Program.Print("============================================");
+            Program.Print("Orig\tDelta\tComb\tGT\tError");
             generateData(fakeData);
             generateData(fakeData2);
             generateData(fakeData3);
@@ -185,12 +189,12 @@ namespace DSMlib
                     for (int k = 0; k < objs.Length; k++)
                     {
                         float deltaY = CheckGradient.DELTA * ldata.WeightDeriv.MemPtr[j];
-                        string can = (objs[k]+deltaY).ToString() + "\t" + newobjs[k].ToString() +"\t";
+                        string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k]+deltaY).ToString() + "\t" + newobjs[k].ToString() +"\t";
                         if (objs[k] != 0)
                             can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k]+deltaY)).ToString();
                         Program.Print(can);
                     }
-                    Program.Print("============================================");
+                    //Program.Print("============================================");
                     weight[j] = weight[j] - CheckGradient.DELTA;
                     link.CopyIntoCuda();
                 }
@@ -206,7 +210,7 @@ namespace DSMlib
                     for (int k = 0; k < objs.Length; k++)
                     {
                         float deltaY = CheckGradient.DELTA * ldata.BiasDeriv.MemPtr[j];
-                        string can = (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                        string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
                         if (objs[k] != 0)
                             can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
                         Program.Print(can);
@@ -221,7 +225,7 @@ namespace DSMlib
             //modify lookup table
             for (int i = 0; i < wordlt.Length; i++)
             {
-                wordlt[i] = wordlt[i] + CheckGradient.DELTA;
+                wordlt[i] = wordlt[i] + 0.001f;
                 dnn.wordLT.CopyIntoCuda();
                 Forward_CalDistance(batches, dis);
                 calObj(newobjs);
@@ -229,14 +233,14 @@ namespace DSMlib
                 Program.Print("Change parameter " + i.ToString() + " in word lookup table:");
                 for (int k = 0; k < objs.Length; k++)
                 {
-                    float deltaY = CheckGradient.DELTA * dnn_runData.wordLT.TabUpdate.MemPtr[i];
-                    string can = (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                    float deltaY = 0.001f * dnn_runData.wordLT.TabUpdate.MemPtr[i];
+                    string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
                     if (objs[k] != 0)
                         can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
                     Program.Print(can);
                 }
                 Program.Print("============================================");
-                wordlt[i] = wordlt[i] - CheckGradient.DELTA;
+                wordlt[i] = wordlt[i] - 0.001f;
                 dnn.wordLT.CopyIntoCuda();
             }
             float[] contextlt = dnn.contextLT.Back_LookupTable;
@@ -251,7 +255,7 @@ namespace DSMlib
                 for (int k = 0; k < objs.Length; k++)
                 {
                     float deltaY = CheckGradient.DELTA * dnn_runData.contextLT.TabUpdate.MemPtr[i];
-                    string can = (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                    string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
                     if (objs[k] != 0)
                         can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
                     Program.Print(can);

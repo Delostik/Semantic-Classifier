@@ -253,5 +253,8 @@ namespace DSMlib
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
 
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Sparse_Update_Lookup_Update(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
     }
 }
