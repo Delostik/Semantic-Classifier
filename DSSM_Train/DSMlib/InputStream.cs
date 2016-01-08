@@ -85,7 +85,13 @@ namespace DSMlib
 
         void LoadDataBatch()
         {
-            Data.Load(mreader, ParameterSetting.BATCH_SIZE);
+            int expectedBatchSize = ParameterSetting.BATCH_SIZE;
+            if (BATCH_INDEX == BATCH_NUM - 1 && LAST_INCOMPLETE_BATCH_SIZE != 0)
+            {
+                // only when the lastbatch is less than  BATCH_SIZE, we will need some care
+                expectedBatchSize = LAST_INCOMPLETE_BATCH_SIZE;
+            }
+            Data.Load(mreader, expectedBatchSize);
         }
 
         public bool Fill()
@@ -171,7 +177,13 @@ namespace DSMlib
 
         void LoadDataBatch()
         {
-            Data.Load(mreader, ParameterSetting.BATCH_SIZE);
+            int expectedBatchSize = ParameterSetting.BATCH_SIZE;
+            if (BATCH_INDEX == BATCH_NUM - 1 && LAST_INCOMPLETE_BATCH_SIZE != 0)
+            {
+                // only when the lastbatch is less than  BATCH_SIZE, we will need some care
+                expectedBatchSize = LAST_INCOMPLETE_BATCH_SIZE;
+            }
+            Data.Load(mreader, expectedBatchSize);
         }
 
         public bool Fill()
