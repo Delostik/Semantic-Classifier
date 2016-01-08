@@ -42,8 +42,15 @@ namespace DSMlib
 
         public void Load(BinaryReader mreader, int batchsize)
         {
-            this.batchsize = batchsize;
             elementSize = mreader.ReadInt32();
+            this.batchsize = mreader.ReadInt32();
+            if (this.batchsize != batchsize)
+            {
+                throw new Exception(string.Format(
+                    "Batch_Size does not match between configuration and input data!\n\tFrom config: {0}.\n\tFrom data: {1}"
+                    , batchsize, this.batchsize)
+                );
+            }
             for (int i = 0; i < batchsize; i++)  //read sample index.
             {
                 Sample_Mem[i] = mreader.ReadInt32();
@@ -125,6 +132,14 @@ namespace DSMlib
         public void Load(BinaryReader mreader, int batchsize)
         {
             int elementSize = mreader.ReadInt32();
+            this.batchsize = mreader.ReadInt32();
+            if (batchsize != this.batchsize)
+            {
+                throw new Exception(string.Format(
+                    "Batch_Size does not match between configuration and input data!\n\tFrom config: {0}.\n\tFrom data: {1}"
+                    , batchsize, this.batchsize)
+                );
+            }
             for (int i = 0; i < batchsize; i++)  //read sample index.
             {
                 Sample_Mem[i] = mreader.ReadInt32();
