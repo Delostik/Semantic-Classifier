@@ -82,17 +82,17 @@ namespace DSMlib
             if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Tanh)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, 1);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN);
             }
             else if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Linear)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis_Linear(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, 1);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN);
             }
             else if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Rectified)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis_Rectified(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, 1, ParameterSetting.DSSMEpsilon);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], distances, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN, ParameterSetting.DSSMEpsilon);
             }
         }
         
