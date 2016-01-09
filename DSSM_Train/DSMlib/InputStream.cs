@@ -23,7 +23,7 @@ namespace DSMlib
         public BatchSample_Input Data = null;
 
         public int nLine = 0;
-        //public int maxElementsPerBatch = 0;
+        public int maxElementsPerBatch = 0;
         public int MAXSEGMENT_BATCH = 0;
         public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
@@ -58,9 +58,11 @@ namespace DSMlib
         {
             mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
             mreader = new BinaryReader(mstream);
-            mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
+            mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
 
-            nLine = mreader.ReadInt32(); int batch_size = mreader.ReadInt32();
+            nLine = mreader.ReadInt32(); 
+            int batch_size = mreader.ReadInt32();
+            maxElementsPerBatch = mreader.ReadInt32();
             if (batch_size != ParameterSetting.BATCH_SIZE)
             {
                 throw new Exception(string.Format(
