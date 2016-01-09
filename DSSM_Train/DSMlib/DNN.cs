@@ -238,7 +238,7 @@ namespace DSMlib
             }
             int ltlength = dim * wordnum;
             for (int mm = 0; mm < ltlength; mm++)
-                Back_LookupTable[mm] = mreader.ReadSingle();
+                Back_LookupTable[mm] = (float)mreader.ReadDouble();
             table.CopyIntoCuda();
 
             mreader.Close();
