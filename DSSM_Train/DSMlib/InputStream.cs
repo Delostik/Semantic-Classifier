@@ -60,9 +60,7 @@ namespace DSMlib
             mreader = new BinaryReader(mstream);
             mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
 
-            nLine = mreader.ReadInt32(); 
-            int batch_size = mreader.ReadInt32();
-            maxElementsPerBatch = mreader.ReadInt32();
+            nLine = mreader.ReadInt32(); int batch_size = mreader.ReadInt32();
             if (batch_size != ParameterSetting.BATCH_SIZE)
             {
                 throw new Exception(string.Format(
@@ -154,7 +152,8 @@ namespace DSMlib
             mreader = new BinaryReader(mstream);
             mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
 
-            nLine = mreader.ReadInt32(); int batch_size = mreader.ReadInt32();
+            int batch_size = mreader.ReadInt32();
+            nLine = mreader.ReadInt32();
             if (batch_size != ParameterSetting.BATCH_SIZE)
             {
                 throw new Exception(string.Format(
