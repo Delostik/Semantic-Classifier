@@ -234,7 +234,7 @@ namespace DSMlib
             {
                 mreader.Close();
                 mstream.Close();
-                throw new Exception("Inconsistent word number or word vector dimension encountered!");
+                throw new Exception("Inconsistent word number or word vector dimension encountered: word num" + wordnum.ToString());
             }
             int ltlength = dim * wordnum;
             for (int mm = 0; mm < ltlength; mm++)

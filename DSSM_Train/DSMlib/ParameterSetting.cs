@@ -22,7 +22,7 @@ namespace DSMlib
     {
 
         // 下面这段是我加的
-        public static int FIXED_FEATURE_DIM = 15;  // 输入词向量的长度
+        public static int FIXED_FEATURE_DIM = 300;  // 输入词向量的长度
 
         public static bool CuBlasEnable = true;
         public static bool CheckGrad = false;
@@ -196,6 +196,10 @@ namespace DSMlib
                 else if (cmds[0].Equals("BATCHSIZE"))
                 {
                     BATCH_SIZE = int.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("FEATURE_DIM"))
+                {
+                    FIXED_FEATURE_DIM = int.Parse(cmds[1]);
                 }
                 else if (cmds[0].Equals("PARM_MARGIN"))
                 {
