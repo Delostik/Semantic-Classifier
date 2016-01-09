@@ -118,17 +118,17 @@ namespace DSMlib
             if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Tanh)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, 1);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN);
             }
             else if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Linear)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis_Linear(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, 1);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN);
             }
             else if (dnn_runData.neurallinks.Last().NeuralLinkModel.Af == A_Func.Rectified)
             {
                 MathOperatorManager.GlobalInstance.Deriv_Dis_Rectified(dnn_runData.neurallayers.Last().ErrorDerivs[0], dnn_runData.neurallayers.Last().ErrorDerivs[1], dnn_runData.neurallayers.Last().ErrorDerivs[2],
-                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, 1, ParameterSetting.DSSMEpsilon);
+                                    dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1], dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, ParameterSetting.PARM_MARGIN, ParameterSetting.DSSMEpsilon);
             }
         }
 
@@ -145,7 +145,7 @@ namespace DSMlib
             dis.CopyOutFromCuda();
             for (int i = 0; i < batchsize; i++)
             {
-                ob[i] = Math.Max(0, 1 - dis.MemPtr[i * 2 + 1] + dis.MemPtr[i * 2]);
+                ob[i] = Math.Max(0, ParameterSetting.PARM_MARGIN - dis.MemPtr[i * 2 + 1] + dis.MemPtr[i * 2]);
             }
         }
 
@@ -221,6 +221,30 @@ namespace DSMlib
                 }
             }
 
+
+            float[] contextlt = dnn.contextLT.Back_LookupTable;
+            for (int i = 0; i < contextlt.Length; i++)
+            {
+                contextlt[i] = contextlt[i] + 0.001f;
+                dnn.contextLT.CopyIntoCuda();
+                Forward_CalDistance(batches, dis);
+                calObj(newobjs);
+                Program.Print("============================================");
+                Program.Print("Change parameter " + i.ToString() + " in context lookup table:");
+                for (int k = 0; k < objs.Length; k++)
+                {
+                    float deltaY = 0.001f * dnn_runData.contextLT.TabUpdate.MemPtr[i];
+                    string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                    if (objs[k] != 0)
+                        can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
+                    Program.Print(can);
+                }
+                Program.Print("============================================");
+                contextlt[i] = contextlt[i] - 0.001f;
+                dnn.contextLT.CopyIntoCuda();
+            }
+
+
             float[] wordlt = dnn.wordLT.Back_LookupTable;
             //modify lookup table
             for (int i = 0; i < wordlt.Length; i++)
@@ -243,27 +267,7 @@ namespace DSMlib
                 wordlt[i] = wordlt[i] - 0.001f;
                 dnn.wordLT.CopyIntoCuda();
             }
-            float[] contextlt = dnn.contextLT.Back_LookupTable;
-            for (int i = 0; i < contextlt.Length; i++)
-            {
-                contextlt[i] = contextlt[i] + CheckGradient.DELTA;
-                dnn.contextLT.CopyIntoCuda();
-                Forward_CalDistance(batches, dis);
-                calObj(newobjs);
-                Program.Print("============================================");
-                Program.Print("Change parameter " + i.ToString() + " in context lookup table:");
-                for (int k = 0; k < objs.Length; k++)
-                {
-                    float deltaY = CheckGradient.DELTA * dnn_runData.contextLT.TabUpdate.MemPtr[i];
-                    string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
-                    if (objs[k] != 0)
-                        can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
-                    Program.Print(can);
-                }
-                Program.Print("============================================");
-                contextlt[i] = contextlt[i] - CheckGradient.DELTA;
-                dnn.contextLT.CopyIntoCuda();
-            }
+            
         }
     }
 }
