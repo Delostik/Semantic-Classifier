@@ -113,7 +113,7 @@ namespace DSMlib
             /// forward (query doc, negdoc) streaming.
             Forward_CalDistance(batches);
 
-            
+           
             
 
             float error = 0;
@@ -123,7 +123,7 @@ namespace DSMlib
                 for (int i = 0; i < batches[0].batchsize; i++)
                 {
                     float mlambda = 0;
-                    mlambda = Math.Max(0, ParameterSetting.PARM_MARGIN - Distance_Back[i * 2 + 1] + Distance_Back[i * 2]);
+                    mlambda = Math.Max(0, 1 - Distance_Back[i * 2 + 1] + Distance_Back[i * 2]);
 
                     if (float.IsNaN(mlambda))
                     {
