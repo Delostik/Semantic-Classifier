@@ -675,6 +675,7 @@ namespace DSMlib
             {
                 return false;
             }
+            
             q0stream.Data.Batch_In_GPU();
             q1stream.Data.Batch_In_GPU();
             q2stream.Data.Batch_In_GPU();

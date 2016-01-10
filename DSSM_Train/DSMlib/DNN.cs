@@ -1166,6 +1166,7 @@ namespace DSMlib
                     else  // must be multi-convolutional, composite layer cannot be the first layer
                     {
                         MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
+
                         MathOperatorManager.GlobalInstance.Multi_Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
                     }
                 }
@@ -1179,6 +1180,7 @@ namespace DSMlib
                     else
                         MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[layerIndex].Outputs[q], neurallink.weight, neurallayers[layerIndex + 1].Outputs[q], data.batchsize, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, 0);
                 }
+
 
                 if (neurallink.Af == A_Func.Tanh)
                 {

@@ -157,7 +157,13 @@ namespace DSMlib
             generateData(fakeData2);
             generateData(fakeData3);
             BatchSample_Input[] batches = new BatchSample_Input[] { fakeData, fakeData2, fakeData3 };
+            //CudaPieceFloat test = new CudaPieceFloat(1, true, true);
+            //Program.Print("test using gpu memory");
             Forward_CalDistance(batches, dis);
+            //test.MemPtr[0] = 1;
+            //test.CopyIntoCuda();
+            //CudaPieceFloat test3 = new CudaPieceFloat(1, true, true);
+            //Program.Print("test3 using gpu memory");
             calObj(objs);
             calculate_outputderiv(dis);
             dnn_runData.backward_propagate_deriv(batches);

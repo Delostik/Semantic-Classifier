@@ -108,8 +108,12 @@ namespace DSMlib
         //unsafe public float feedstream_batch( BatchSample_Input query_batch,  BatchSample_Input doc_batch, List<BatchSample_Input> negdoc_batches, bool train_update)
         unsafe public float feedstream_batch( BatchSample_Input[] batches, bool train_update)
         {
+            
+            
             /// forward (query doc, negdoc) streaming.
             Forward_CalDistance(batches);
+
+            
             
 
             float error = 0;
@@ -119,7 +123,7 @@ namespace DSMlib
                 for (int i = 0; i < batches[0].batchsize; i++)
                 {
                     float mlambda = 0;
-                    mlambda = Math.Max(0, 1 - Distance_Back[i * 2 + 1] + Distance_Back[i * 2 + 1]);
+                    mlambda = Math.Max(0, ParameterSetting.PARM_MARGIN - Distance_Back[i * 2 + 1] + Distance_Back[i * 2]);
 
                     if (float.IsNaN(mlambda))
                     {
@@ -135,14 +139,16 @@ namespace DSMlib
                 }
             }
 
+
+
             if (train_update)
             {
                 calculate_outputderiv(batches[0].batchsize);
 
-                
+
                 // back propagate 
                 dnn_runData.backward_propagate_deriv(batches);
-                
+
                 // update here 
                 // here we have to do all the backprop computations before updating the model, because the model's actual weights will affect the backprop computation                
                 dnn_runData.update_weight(batches, LearningParameters.momentum, LearningParameters.learning_rate * batches[0].batchsize / ParameterSetting.BATCH_SIZE);
@@ -407,6 +413,8 @@ namespace DSMlib
             int mmindex = 0;
             for (int iter = lastRunStopIter + 1; iter <= ParameterSetting.MAX_ITER; iter++)
             {
+                
+                
                 Program.Print("ITER : " + iter.ToString());
                 LearningParameters.learning_rate = LearningParameters.lr_mid;
                 LearningParameters.momentum = 0.0f;
@@ -426,7 +434,9 @@ namespace DSMlib
                 TriStream.Init_Batch();
                 trainingLoss = 0;
                 //LearningParameters.neg_static_sample = false;
-                mmindex = 0;                
+                mmindex = 0;
+
+                
 
                 while (TriStream.Next_Batch())
                 {
@@ -479,6 +489,8 @@ namespace DSMlib
                         dnn.Init(dnn_backup);
                     }
                 }
+
+                
 
                 string dssmModelPath = ComposeDSSMModelPaths(iter);
                 Program.Print("Saving models ...");
