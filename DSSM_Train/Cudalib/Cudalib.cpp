@@ -131,9 +131,9 @@ DLLEXP void __stdcall Zero(float * gpu_floats, uint32_t len)
 /************************************************************/
 
 /**************Cuda  Matrix Operation************************/
-DLLEXP void __stdcall Matrix_Ada_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr)
+DLLEXP void __stdcall Matrix_Ada_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr, float eps)
 {
-	cuda_Matrix_Ada_Grad_Decent(gpu_floats_a, gpu_floats_b, adaG, m, n, lr);
+	cuda_Matrix_Ada_Grad_Decent(gpu_floats_a, gpu_floats_b, adaG, m, n, lr, eps);
 }
 
 DLLEXP void __stdcall Matrix_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float lr)
@@ -480,9 +480,9 @@ DLLEXP void __stdcall Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * 
 	cuda_Sparse_Update_Lookup(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr);
 }
 
-DLLEXP void __stdcall Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad)
+DLLEXP void __stdcall Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps)
 {
-	cuda_Sparse_Update_Lookup_Ada(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr, adaGrad);
+	cuda_Sparse_Update_Lookup_Ada(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr, adaGrad, eps);
 }
 
 DLLEXP void __stdcall Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)

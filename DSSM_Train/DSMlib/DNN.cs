@@ -1407,7 +1407,7 @@ namespace DSMlib
                 }
                 else // AdaGrad
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, neurallinks[i].WeightAdaGrad, col, row, learning_rate);
+                    MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, neurallinks[i].WeightAdaGrad, col, row, learning_rate, ParameterSetting.DSSMEpsilon);
                 }
 
                 if (ParameterSetting.UpdateBias)
@@ -1428,7 +1428,7 @@ namespace DSMlib
                     }
                     else // AdaGrad
                     {
-                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate, ParameterSetting.DSSMEpsilon);
                     }
                 }
             }
@@ -1451,8 +1451,8 @@ namespace DSMlib
             }
             else // AdaGrad
             {
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(wordLT.Table, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
-                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(contextLT.Table, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(wordLT.Table, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate, ParameterSetting.DSSMEpsilon);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(contextLT.Table, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate, ParameterSetting.DSSMEpsilon);
             }
 
         }

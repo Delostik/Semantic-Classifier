@@ -59,7 +59,7 @@ namespace DSMlib
         
         /*----------  Mainly used in backward propagation, computing weight updates and updating weights --------------*/
         void Scale_Matrix(CudaPieceFloat matrix, int inputDimension, int outputDimnsion, float momentum );
-        void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate);
+        void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate, float eps);
         void Matrix_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, int inputDimension, int outputDimnsion, float learning_rate);
         void Matrix_Add(CudaPieceFloat matrix, CudaPieceFloat updates, int inputDimension, int outputDimnsion, float learning_rate);
         void Matrix_Add_REAL(CudaPieceFloat matrix, CudaPieceFloat updates, int inputDimension, int outputDimnsion);
@@ -107,7 +107,7 @@ namespace DSMlib
 
         void Sparse_Update_Lookup(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr);
 
-        void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr);
+        void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr, float eps);
 
         void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr);
     }
@@ -374,9 +374,9 @@ namespace DSMlib
             Cudalib.Matrix_Add(matrix.CudaPtr, updates.CudaPtr, inputDimension, outputDimnsion, learning_rate);
         }
 
-        public void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate)
+        public void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate, float eps)
         {
-            Cudalib.Matrix_Ada_Grad_Decent(matrix.CudaPtr, grad.CudaPtr, adaGrad.CudaPtr, inputDimension, outputDimnsion, learning_rate);
+            Cudalib.Matrix_Ada_Grad_Decent(matrix.CudaPtr, grad.CudaPtr, adaGrad.CudaPtr, inputDimension, outputDimnsion, learning_rate, eps);
         }
 
         public void Matrix_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, int inputDimension, int outputDimnsion, float learning_rate)
@@ -482,9 +482,9 @@ namespace DSMlib
             Cudalib.Sparse_Update_Lookup(table.LookupTable, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr);
         }
 
-        public void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
+        public void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr, float eps)
         {
-            Cudalib.Sparse_Update_Lookup_Ada(table.LookupTable, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr, tableD.TabAdaGrad.CudaPtr);
+            Cudalib.Sparse_Update_Lookup_Ada(table.LookupTable, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr, tableD.TabAdaGrad.CudaPtr, eps);
         }
 
         public void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
@@ -749,7 +749,7 @@ namespace DSMlib
             BasicMathlib.Matrix_Add(matrix.MemPtr, updates.MemPtr, inputDimension, outputDimnsion, learning_rate);
         }
 
-        public void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate)
+        public void Matrix_Ada_Grad_Decent(CudaPieceFloat matrix, CudaPieceFloat grad, CudaPieceFloat adaGrad, int inputDimension, int outputDimnsion, float learning_rate, float eps)
         {
             // not implemented
             //Cudalib.Matrix_Ada_Grad_Decent(matrix.CudaPtr, grad.CudaPtr, adaGrad.CudaPtr, inputDimension, outputDimnsion, learning_rate);
@@ -822,7 +822,7 @@ namespace DSMlib
             // not implemented
         }
 
-        public void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
+        public void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr, float eps)
         {
             // not implemented
         }

@@ -47,7 +47,7 @@ namespace DSMlib
 
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
-        public unsafe static extern void Matrix_Ada_Grad_Decent(IntPtr gpu_floats_a, IntPtr gpu_floats_b, IntPtr adaG, int m, int n, float lr);
+        public unsafe static extern void Matrix_Ada_Grad_Decent(IntPtr gpu_floats_a, IntPtr gpu_floats_b, IntPtr adaG, int m, int n, float lr, float eps);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Matrix_Grad_Decent(IntPtr gpu_floats_a, IntPtr gpu_floats_b, int m, int n, float lr);
@@ -259,7 +259,7 @@ namespace DSMlib
         public unsafe static extern void Sparse_Update_Lookup(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
-        public unsafe static extern void Sparse_Update_Lookup_Ada(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, IntPtr adaGrad);
+        public unsafe static extern void Sparse_Update_Lookup_Ada(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, IntPtr adaGrad, float eps);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup_Update(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
