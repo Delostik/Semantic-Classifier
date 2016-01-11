@@ -59,7 +59,28 @@ namespace DSMlib
             }
             if (needGpuMem)
             {
-                if ((Int64)(cudaPiecePointer = Cudalib.CudaAllocFloat(size)) == 0)
+                if ((Int64)(cudaPiecePointer = Cudalib.CudaAllocFloat(size, 0)) == 0)
+                {
+                    throw new Exception("Out of GPU Memo, use a smaller model!");
+                }
+            }
+        }
+
+        public CudaPieceFloat(int length, bool needCpuMem, bool needGpuMem, float init)
+        {
+            if (ParameterSetting.MATH_LIB == MathLibType.cpu)
+            {
+                needCpuMem = true;
+                needGpuMem = false;
+            }
+            size = length;
+            if (needCpuMem)
+            {
+                cpuMemArray = new float[size];
+            }
+            if (needGpuMem)
+            {
+                if ((Int64)(cudaPiecePointer = Cudalib.CudaAllocFloat(size, init)) == 0)
                 {
                     throw new Exception("Out of GPU Memo, use a smaller model!");
                 }

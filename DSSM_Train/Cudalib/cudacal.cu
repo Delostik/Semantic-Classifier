@@ -21,6 +21,52 @@
 using namespace std; 
 using namespace _com_util;
 
+__global__ void cuda_matrix_ada_grad_decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < n && idy < m)
+	{
+		int updateIdx = idy*n + idx;
+		float gradval = gpu_floats_b[updateIdx];
+		float adaval = adaG[updateIdx] + gradval * gradval;
+		adaG[updateIdx] = adaval;
+		gpu_floats_a[updateIdx] = gpu_floats_a[updateIdx] - (lr*gradval/sqrtf(adaval));
+	}
+}
+
+void cuda_Matrix_Ada_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr)
+{
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = (m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((n + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (m + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_matrix_ada_grad_decent<<<block_tail, thread_tail>>>(gpu_floats_a, gpu_floats_b, adaG, m, n, lr);
+}
+
+
+__global__ void cuda_matrix_grad_decent(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float lr)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < n && idy < m)
+	{
+		gpu_floats_a[idy*n + idx] = gpu_floats_a[idy*n + idx] - gpu_floats_b[idy*n + idx] * lr;
+	}
+}
+
+void cuda_Matrix_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float lr)
+{
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = (m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((n + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (m + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_matrix_grad_decent<<<block_tail, thread_tail>>>(gpu_floats_a, gpu_floats_b, m, n, lr);
+}
+
+
 __global__ void cuda_matrix_add(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float mweight)
 { 
 	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -2225,6 +2271,50 @@ void cuda_Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int
 }
 
 
+__global__ void cuda_sparse_update_lookup_ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int sq1sq2, int IDnum, int Feature_Dimension, float lr, float * adaGrad)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < Feature_Dimension && idy < IDnum)
+	{
+		int colend = Fea_Idx[idy];
+		int colbegin = 0;
+		if (idy > 0)
+			colbegin = Fea_Idx[idy - 1];
+		float accu = 0;
+		for (int t = colbegin; t < colend; t++)
+		{
+			int tidx = Seq[t];
+			if (tidx < seq1size)
+			{
+				accu += ltDeriv1[tidx*Feature_Dimension + idx];
+			}
+			else if (tidx < sq1sq2)
+			{
+				accu += ltDeriv2[(tidx - seq1size)*Feature_Dimension + idx];
+			}
+			else
+			{
+				accu += ltDeriv3[(tidx - sq1sq2)*Feature_Dimension + idx];
+			}
+		}
+		//int wid = Fea_ID[idy];
+		int updatepos = Fea_ID[idy] * Feature_Dimension + idx;
+		float tempf = adaGrad[updatepos] + accu * accu;
+		adaGrad[updatepos] = tempf;
+		lookupt[updatepos] = lookupt[updatepos] - (lr * accu / sqrtf(tempf));
+	}
+}
+
+void cuda_Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	int sq1sq2 = seq1size + seq2size;
+	cuda_sparse_update_lookup_ada<<<block_tail, thread_tail>>>(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, sq1sq2, IDnum, Feature_Dimension, lr, adaGrad);
+}
+
+
 
 __global__ void cuda_sparse_update_lookup_update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int sq1sq2, int IDnum, int Feature_Dimension, float lr)
 {
@@ -2265,4 +2355,26 @@ void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int 
 	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 	int sq1sq2 = seq1size + seq2size;
 	cuda_sparse_update_lookup_update<<<block_tail, thread_tail >>>(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, sq1sq2, IDnum, Feature_Dimension, lr);
+}
+
+
+
+__global__ void cuda_init_float_array(float * target, float val, int size)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < size)
+	{
+		target[idx] = val;
+	}
+}
+
+void cuda_Init_Float_Array(float * target, float val, int size)
+{
+	uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	uint32_t nBlockPerGrid = (size + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+
+	//dim3 thread_tail(DEFAULT_THREAD_PER_DIM,DEFAULT_THREAD_PER_DIM);
+	//dim3 block_tail((batchsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, ( labelDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_init_float_array<<< nBlockPerGrid, DEFAULT_THREAD_PER_BLOCK >>>(target, val, size);
 }

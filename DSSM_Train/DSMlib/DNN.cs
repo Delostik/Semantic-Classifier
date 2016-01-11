@@ -783,9 +783,11 @@ namespace DSMlib
 
         CudaPieceFloat[] inputDerivs = null;
         CudaPieceFloat tabUpdate = null;
+        CudaPieceFloat tabAdaGrad = null;
 
         public CudaPieceFloat[] InputDeriv { get { return inputDerivs; } }
         public CudaPieceFloat TabUpdate { get { return tabUpdate; } }
+        public CudaPieceFloat TabAdaGrad { get { return tabAdaGrad; } }
 
         //some auxiliary variables
         public CudaPieceInt uniqueWordID = null;
@@ -799,7 +801,10 @@ namespace DSMlib
             this.isWordInput = isWordInput;
             
             inputDerivs = new CudaPieceFloat[3];
-            tabUpdate = new CudaPieceFloat(Dim * Count, ParameterSetting.CheckGrad ? true : false, true);
+            if (ParameterSetting.updateScheme == 1)
+                tabUpdate = new CudaPieceFloat(Dim * Count, ParameterSetting.CheckGrad ? true : false, true);
+            else if (ParameterSetting.updateScheme == 2)
+                tabAdaGrad = new CudaPieceFloat(Dim * Count, ParameterSetting.CheckGrad ? true : false, true);
             if (isWordInput)
             {
                 for (int i = 0; i < inputDerivs.Length; i++)
@@ -1001,6 +1006,20 @@ namespace DSMlib
             get { return biasUpdate; }
         }
 
+        // used by adaptive gradient descent  adagrad += grad^2;    weight = weight - lr*grad/sqrt(adagrad)
+        CudaPieceFloat weightAdaGrad = null;
+
+        public CudaPieceFloat WeightAdaGrad
+        {
+            get { return weightAdaGrad; }
+        }
+        CudaPieceFloat biasAdaGrad = null;
+
+        public CudaPieceFloat BiasAdaGrad
+        {
+            get { return biasAdaGrad; }
+        }
+
         public NeuralLinkData(NeuralLink neuralLink)
         {
             neuralLinkModel = neuralLink;
@@ -1041,8 +1060,16 @@ namespace DSMlib
             weightDeriv = new CudaPieceFloat(totalweightsize, ParameterSetting.CheckGrad ? true : false, true);
             biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, ParameterSetting.CheckGrad ? true : false, true);
 
-            weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
-            biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
+            if (ParameterSetting.updateScheme == 1)
+            {
+                weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
+                biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
+            }
+            else if (ParameterSetting.updateScheme == 2)
+            {
+                weightAdaGrad = new CudaPieceFloat(totalweightsize, false, true, ParameterSetting.initAdaGrad);
+                biasAdaGrad = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true, ParameterSetting.initAdaGrad);
+            }
         }
 
         ~NeuralLinkData()
@@ -1362,34 +1389,57 @@ namespace DSMlib
                     row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
                     col = neurallinks[i].NeuralLinkModel.Neural_In.Number * neurallinks[i].NeuralLinkModel.N_Winsize;
                 }
-                // add the momentum
-                MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].WeightUpdate, col, row, momentum);
 
-                // dnn_neurallinks[i].Weight
-                MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].WeightUpdate, neurallinks[i].WeightDeriv, col, row, learning_rate);
+                if (ParameterSetting.updateScheme == 1)
+                {
+                    // add the momentum
+                    MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].WeightUpdate, col, row, momentum);
 
-                // update the model: Weight = Weight += Wei_Update
-                MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, col, row);
+                    // dnn_neurallinks[i].Weight
+                    MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].WeightUpdate, neurallinks[i].WeightDeriv, col, row, learning_rate);
+
+                    // update the model: Weight = Weight += Wei_Update
+                    MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, col, row);
+                }
+                else if (ParameterSetting.updateScheme == 0)
+                {
+                    MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, col, row, learning_rate);
+                }
+                else // AdaGrad
+                {
+                    MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, neurallinks[i].WeightAdaGrad, col, row, learning_rate);
+                }
 
                 if (ParameterSetting.UpdateBias)
                 {
-                    // add the momentum
-                    MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, momentum);
+                    if (ParameterSetting.updateScheme == 1)
+                    {
+                        // add the momentum
+                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, momentum);
 
-                    // dnn_neurallinks[i].Weight
-                    MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
-                    // upate the model
-                    MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
+                        // dnn_neurallinks[i].Weight
+                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        // upate the model
+                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
+                    }
+                    else if (ParameterSetting.updateScheme == 0)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                    }
+                    else // AdaGrad
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                    }
                 }
             }
 
             // update lookup tables
-            if (momentum == 0)
+            if (ParameterSetting.updateScheme == 0)
             {
                 MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(wordLT.Table, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
                 MathOperatorManager.GlobalInstance.Sparse_Update_Lookup(contextLT.Table, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
             }
-            else
+            else if (ParameterSetting.updateScheme == 1)
             {
                 MathOperatorManager.GlobalInstance.Scale_Matrix(wordLT.TabUpdate, wordLT.Table.count, wordLT.Table.vecDim, momentum);
                 MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(wordLT.TabUpdate, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
@@ -1398,6 +1448,11 @@ namespace DSMlib
                 MathOperatorManager.GlobalInstance.Scale_Matrix(contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim, momentum);
                 MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Update(contextLT.TabUpdate, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
                 MathOperatorManager.GlobalInstance.Matrix_Add_REAL(contextLT.Table.table, contextLT.TabUpdate, contextLT.Table.count, contextLT.Table.vecDim);
+            }
+            else // AdaGrad
+            {
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(wordLT.Table, wordLT, input_batches[0].elementSize, input_batches[1].elementSize, wordLT.Table.vecDim, learning_rate);
+                MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada(contextLT.Table, contextLT, input_batches[0].batchsize, input_batches[1].batchsize, contextLT.Table.vecDim, learning_rate);
             }
 
         }

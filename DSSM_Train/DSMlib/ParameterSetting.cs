@@ -118,6 +118,9 @@ namespace DSMlib
 
         public static bool Denoising = false;
 
+        public static float initAdaGrad = 0;
+
+        public static int updateScheme = 0; // 0 -- pure gradient descent; 1 -- with momentum; 2 -- AdaGrad
         /// <summary>
         /// set to be true to load feature values as int32
         /// by default it is false, meaning loading feature value as single float. 
@@ -196,6 +199,10 @@ namespace DSMlib
                 else if (cmds[0].Equals("BATCHSIZE"))
                 {
                     BATCH_SIZE = int.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("UPDATE_SCHEME"))
+                {
+                    updateScheme = int.Parse(cmds[1]);
                 }
                 else if (cmds[0].Equals("FEATURE_DIM"))
                 {

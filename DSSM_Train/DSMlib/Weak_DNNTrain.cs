@@ -391,7 +391,7 @@ namespace DSMlib
             }
 
             //// Clone to backup models
-            if (ParameterSetting.ISVALIDATE)
+            if (ParameterSetting.ISVALIDATE && ParameterSetting.updateScheme != 2)
             {
                 dnn_backup = dnn.CreateBackupClone();
             }
@@ -467,26 +467,29 @@ namespace DSMlib
                     }
                     Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
 
-                    if (VALIDATION_Eval >= previous_devEval - LearningParameters.accept_range)
+                    if (ParameterSetting.updateScheme != 2)
                     {
-                        Console.WriteLine("Accepted it");
-                        previous_devEval = VALIDATION_Eval;
-                        if (LearningParameters.IsrateDown)
+                        if (VALIDATION_Eval >= previous_devEval - LearningParameters.accept_range)
                         {
-                            LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.down_rate;
+                            Console.WriteLine("Accepted it");
+                            previous_devEval = VALIDATION_Eval;
+                            if (LearningParameters.IsrateDown)
+                            {
+                                LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.down_rate;
+                            }
+                            //// save model to backups
+                            dnn_backup.Init(dnn);
                         }
-                        //// save model to backups
-                        dnn_backup.Init(dnn);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Reject it");
+                        else
+                        {
+                            Console.WriteLine("Reject it");
 
-                        LearningParameters.IsrateDown = true;
-                        LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.reject_rate;
+                            LearningParameters.IsrateDown = true;
+                            LearningParameters.lr_mid = LearningParameters.lr_mid * LearningParameters.reject_rate;
 
-                        //// recover model from the last saved backup
-                        dnn.Init(dnn_backup);
+                            //// recover model from the last saved backup
+                            dnn.Init(dnn_backup);
+                        }
                     }
                 }
 

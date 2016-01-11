@@ -96,11 +96,14 @@ DLLEXP void __stdcall CudaCopyInInt(uint32_t * gpu_ints, uint32_t * int_array, u
 }
 
 
-DLLEXP float * __stdcall CudaAllocFloat(uint32_t e)
+DLLEXP float * __stdcall CudaAllocFloat(uint32_t e, float init)
 {
 	float * gpu_floats;
 	cudaMalloc((void **)&gpu_floats, e * sizeof(float));
-	cudaMemset(gpu_floats,0,e * sizeof(float));
+	if (init == 0)
+		cudaMemset(gpu_floats, 0, e * sizeof(float));
+	else
+		cuda_Init_Float_Array(gpu_floats, init, e);
 	return gpu_floats;
 }
 
@@ -128,6 +131,16 @@ DLLEXP void __stdcall Zero(float * gpu_floats, uint32_t len)
 /************************************************************/
 
 /**************Cuda  Matrix Operation************************/
+DLLEXP void __stdcall Matrix_Ada_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr)
+{
+	cuda_Matrix_Ada_Grad_Decent(gpu_floats_a, gpu_floats_b, adaG, m, n, lr);
+}
+
+DLLEXP void __stdcall Matrix_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float lr)
+{
+	cuda_Matrix_Grad_Decent(gpu_floats_a, gpu_floats_b, m, n, lr);
+}
+
 DLLEXP void __stdcall Matrix_Add(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float mweight)
 {
 	cuda_Matrix_Add(gpu_floats_a, gpu_floats_b,  m,  n, mweight);
@@ -465,6 +478,11 @@ DLLEXP void __stdcall FillOut_Composite(float* data, uint32_t* feaIdx, float* co
 DLLEXP void __stdcall Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)
 {
 	cuda_Sparse_Update_Lookup(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr);
+}
+
+DLLEXP void __stdcall Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad)
+{
+	cuda_Sparse_Update_Lookup_Ada(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr, adaGrad);
 }
 
 DLLEXP void __stdcall Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)

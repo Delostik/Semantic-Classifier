@@ -48,6 +48,8 @@ void cublas_Sasum(float *x, int len, int norm, float * result);
 void cublas_Matrix_Multipy(float * delta, float * weight, float * delta_low, uint32_t batchsize, uint32_t m, uint32_t n, uint32_t inverse);
 
 
+void cuda_Matrix_Ada_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, float * adaG, uint32_t m, uint32_t n, float lr);
+void cuda_Matrix_Grad_Decent(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float lr);
 void cuda_Matrix_Add(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n, float weight);
 void cuda_Matrix_Add_REAL(float * gpu_floats_a, float * gpu_floats_b, uint32_t m, uint32_t n);
 void cuda_Scale_Matrix(float * gpu_floats_a, uint32_t m, uint32_t n, float mweight);
@@ -164,4 +166,9 @@ void cuda_FillOut_Composite(float* data, uint32_t* feaIdx, float* compData, floa
 
 void cuda_Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
 
+void cuda_Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad);
+
 void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
+
+void cuda_Init_Float_Array(float * target, float val, int size);

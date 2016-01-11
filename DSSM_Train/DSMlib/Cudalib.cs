@@ -24,7 +24,7 @@ namespace DSMlib
         public unsafe static extern IntPtr CudaAllocInt(int e);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
-        public unsafe static extern IntPtr CudaAllocFloat(int e);
+        public unsafe static extern IntPtr CudaAllocFloat(int e, float init);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void CudaDeallocFloat(IntPtr gpu_floats);
@@ -46,6 +46,11 @@ namespace DSMlib
         public unsafe static extern void Zero(IntPtr gpu_floats, int len);
 
 
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Matrix_Ada_Grad_Decent(IntPtr gpu_floats_a, IntPtr gpu_floats_b, IntPtr adaG, int m, int n, float lr);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Matrix_Grad_Decent(IntPtr gpu_floats_a, IntPtr gpu_floats_b, int m, int n, float lr);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Matrix_Add(IntPtr gpu_floats_a, IntPtr gpu_floats_b, int m, int n, float mweight);
@@ -252,6 +257,9 @@ namespace DSMlib
         
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Sparse_Update_Lookup_Ada(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, IntPtr adaGrad);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup_Update(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
