@@ -442,9 +442,9 @@ namespace DSMlib
                 {
                     trainingLoss += feedstream_batch(new BatchSample_Input[] {TriStream.GPU_q0batch, TriStream.GPU_q1batch, TriStream.GPU_q2batch}, true);
                     mmindex += 1;
-                    if (mmindex % 50 == 0)
+                    if (mmindex % 2 == 0)
                     {
-                        Console.Write("Training :{0}\r", mmindex.ToString());
+                        Console.WriteLine("Training :{0}", mmindex.ToString());
                     }
                 }
 

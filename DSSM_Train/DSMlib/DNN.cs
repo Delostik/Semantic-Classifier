@@ -1193,12 +1193,12 @@ namespace DSMlib
                     else  // must be multi-convolutional, composite layer cannot be the first layer
                     {
                         MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
-                        
-                        //CudaPieceInt test1 = new CudaPieceInt(1, true, true);
-                        //test1.MemPtr[0] = 1;
-                        //test1.CopyIntoCuda();
-                        //CudaPieceInt test2 = new CudaPieceInt(1, true, true);
-                        //Program.Print("Success!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
+                        CudaPieceInt test1 = new CudaPieceInt(1, true, true);
+                        test1.MemPtr[0] = 1;
+                        test1.CopyIntoCuda();
+                        CudaPieceInt test2 = new CudaPieceInt(1, true, true);
+                        Program.Print("Success!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
                         MathOperatorManager.GlobalInstance.Multi_Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
                     }
