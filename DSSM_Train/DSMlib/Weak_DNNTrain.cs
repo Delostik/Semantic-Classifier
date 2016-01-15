@@ -123,7 +123,7 @@ namespace DSMlib
                 for (int i = 0; i < batches[0].batchsize; i++)
                 {
                     float mlambda = 0;
-                    mlambda = Math.Max(0, 1 - Distance_Back[i * 2 + 1] + Distance_Back[i * 2]);
+                    mlambda = Math.Max(0, ParameterSetting.PARM_MARGIN - Distance_Back[i * 2 + 1] + Distance_Back[i * 2]);
 
                     if (float.IsNaN(mlambda))
                     {
@@ -160,7 +160,9 @@ namespace DSMlib
         int pairTrainFilesIdx = 0;
         List<string> ConstructShuffleTrainFiles(string file)
         {
-            List<string> trainFiles = new FileInfo(file).Directory.GetFiles(new FileInfo(file).Name + ".shuffle*").Select(o => o.FullName).ToList();
+            FileInfo fi = new FileInfo(file);
+            string prefix = fi.Name.Substring(0, fi.Name.LastIndexOf('.'));
+            List<string> trainFiles = new FileInfo(file).Directory.GetFiles(prefix + "_sf*").Select(o => o.FullName).ToList();
             if (File.Exists(file))
             {
                 trainFiles.Add(file);

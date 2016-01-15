@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using System.Diagnostics;
+
 namespace DSMlib
 {
     public enum A_Func { Linear = 0, Tanh = 1, Rectified = 2 };
@@ -1140,6 +1142,8 @@ namespace DSMlib
         public List<NeuralLayerData> neurallayers = new List<NeuralLayerData>();
         public List<NeuralLinkData> neurallinks = new List<NeuralLinkData>();
         public LookupTabRunData wordLT, contextLT;
+        Stopwatch sw = new Stopwatch();
+
 
         public DNNRun(DNN model)
         {
@@ -1194,11 +1198,11 @@ namespace DSMlib
                     {
                         MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
 
-                        CudaPieceInt test1 = new CudaPieceInt(1, true, true);
-                        test1.MemPtr[0] = 1;
-                        test1.CopyIntoCuda();
-                        CudaPieceInt test2 = new CudaPieceInt(1, true, true);
-                        Program.Print("Success!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                        //CudaPieceInt test1 = new CudaPieceInt(1, true, true);
+                        //test1.MemPtr[0] = 1;
+                        //test1.CopyIntoCuda();
+                        //CudaPieceInt test2 = new CudaPieceInt(1, true, true);
+                        //Program.Print("Success!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
                         MathOperatorManager.GlobalInstance.Multi_Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
                     }
@@ -1459,6 +1463,11 @@ namespace DSMlib
 
         unsafe void summarizeUnique(BatchSample_Input[] inputBatches)
         {
+            if (ParameterSetting.DEBUG)
+            {
+                sw.Reset();
+                sw.Start();
+            }
             Dictionary<int, List<int>> wordSum = new Dictionary<int, List<int>>(10000);
             int offset = 0;
             for (int i = 0; i < 3; i++)
@@ -1529,6 +1538,12 @@ namespace DSMlib
             contextLT.uniqueWordID.CopyIntoCuda();
             contextLT.uniqueWordIdx.CopyIntoCuda();
             contextLT.Sequence.CopyIntoCuda();
+
+            if (ParameterSetting.DEBUG)
+            {
+                sw.Stop();
+                Program.Print("==================>SummarizeUnique time used: " + sw.Elapsed.ToString());
+            }
         }
     }
 }

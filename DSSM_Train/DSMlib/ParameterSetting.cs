@@ -200,6 +200,10 @@ namespace DSMlib
                 {
                     BATCH_SIZE = int.Parse(cmds[1]);
                 }
+                else if (cmds[0].Equals("DEBUG"))
+                {
+                    DEBUG = (int.Parse(cmds[1])==1);
+                }
                 else if (cmds[0].Equals("UPDATE_SCHEME"))
                 {
                     updateScheme = int.Parse(cmds[1]);
