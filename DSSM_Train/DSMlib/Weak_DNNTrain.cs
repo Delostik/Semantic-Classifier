@@ -307,6 +307,72 @@ namespace DSMlib
             ModelPath = ParameterSetting.MODEL_PATH + "_ITER=" + iter.ToString();
             return ModelPath;
         }
+
+        void checkData(BatchSample_Input batch, int q)
+        {
+            string prefix = "q" + q.ToString() + ": ";
+            int[] sampidx = batch.Sample_Mem;
+            int[] wordidx = batch.Word_Idx_Mem;
+            int[] wordMargin = batch.Seg_Margin_Mem;
+            int[] feaidx = batch.Fea_Mem;
+            if (sampidx[batch.batchsize - 1] > PairInputStream.MAXSEGMENT_BATCH)
+                Program.Print(prefix + "sample idx exceed max seg size!");
+            if (sampidx[batch.batchsize - 1] != batch.elementSize)
+                Program.Print(prefix + "sample idx not consistent with elementSize!");
+
+            if (wordMargin[batch.elementSize - 1] >= batch.batchsize)
+                Program.Print(prefix + "last of word margin not consistent with batch size!");
+
+            for (int i = 0; i < batch.batchsize; i++)
+            {
+                if (sampidx[i] > batch.elementSize || sampidx[i] < 0)
+                    Program.Print(prefix + "sample idx at position " + i.ToString() + " out of range!");
+                if (i == 0)
+                {
+                    if (sampidx[i] < 3)
+                        Program.Print(prefix + "A sentence with length < 3 found at the beginning! Length: " + sampidx[i].ToString());
+                }
+                else
+                {
+                    if (sampidx[i] - sampidx[i - 1] < 3)
+                        Program.Print(prefix + "A sentence with length < 3 found at position " + i.ToString() + " ! Length: " + (sampidx[i] - sampidx[i - 1]).ToString());
+                }
+
+                if (feaidx[i] >= ParameterSetting.CONTEXT_NUM || feaidx[i] < 0)
+                    Program.Print("context idx at position " + i.ToString() + " out of range!");
+            }
+
+            for (int i = 0; i < batch.elementSize; i++)
+            {
+                if (wordidx[i] >= ParameterSetting.WORD_NUM || wordidx[i] < 0)
+                    Program.Print("Word idx at position " + i.ToString() + " out of range!");
+                if (wordMargin[i] >= batch.batchsize || wordMargin[i] < 0)
+                    Program.Print("Word Margin at position " + i.ToString() + " out of range!");
+            }
+
+        }
+
+        public override void CheckDataOnly()
+        {
+            do
+            {
+                int batchidx = 0;
+                TriStream.Init_Batch();
+                while (TriStream.Next_Batch())
+                {
+                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][0] + ", batchnum=" + batchidx.ToString());
+                    checkData(TriStream.GPU_q0batch, 0);
+                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][1] + ", batchnum=" + batchidx.ToString());
+                    checkData(TriStream.GPU_q0batch, 1);
+                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][2] + ", batchnum=" + batchidx.ToString());
+                    checkData(TriStream.GPU_q0batch, 2);
+                    batchidx++;
+                }
+                LoadPairDataAtIdx();
+            }
+            while (pairTrainFilesIdx != 1);
+        }
+
         public override void Training()
         {
             Init();

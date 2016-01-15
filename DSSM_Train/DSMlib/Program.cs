@@ -123,6 +123,13 @@ namespace DSMlib
                         //}
                         break;                    
                 }
+
+                if (ParameterSetting.CheckData)
+                {
+                    dnnTrain.CheckDataOnly();
+                    return;
+                }
+
                 dnnTrain.ModelInit_FromConfig();
                 dnnTrain.Training();
                 dnnTrain.Dispose();

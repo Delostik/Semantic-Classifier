@@ -40,6 +40,11 @@ namespace DSMlib
         {
             return 0;
         }
+
+        public virtual void CheckDataOnly()
+        {
+
+        }
     }
 
     //public class DSSM_Train : DNN_Train
