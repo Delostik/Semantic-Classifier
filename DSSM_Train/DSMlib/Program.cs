@@ -61,7 +61,7 @@ namespace DSMlib
                 {
                     Directory.CreateDirectory(logDirecotry);
                 }
-                log_stream = new FileStream(ParameterSetting.Log_FileName, FileMode.Create, FileAccess.Write);
+                log_stream = new FileStream(ParameterSetting.Log_FileName, FileMode.Append, FileAccess.Write);
                 log_writer = new StreamWriter(log_stream);
 
                 string modelDirectory = new FileInfo(ParameterSetting.MODEL_PATH).Directory.FullName;

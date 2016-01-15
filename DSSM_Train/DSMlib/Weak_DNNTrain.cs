@@ -360,11 +360,14 @@ namespace DSMlib
                 TriStream.Init_Batch();
                 while (TriStream.Next_Batch())
                 {
-                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][0] + ", batchnum=" + batchidx.ToString());
+                    int fileidx = pairTrainFilesIdx - 1;
+                    if (fileidx < 0)
+                        fileidx = pairTrainFiles.Count - 1;
+                    Program.Print("Checking file: " + pairTrainFiles[fileidx][0] + ", batchnum=" + batchidx.ToString());
                     checkData(TriStream.GPU_q0batch, 0);
-                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][1] + ", batchnum=" + batchidx.ToString());
+                    Program.Print("Checking file: " + pairTrainFiles[fileidx][1] + ", batchnum=" + batchidx.ToString());
                     checkData(TriStream.GPU_q0batch, 1);
-                    Program.Print("Checking file: " + pairTrainFiles[pairTrainFilesIdx - 1][2] + ", batchnum=" + batchidx.ToString());
+                    Program.Print("Checking file: " + pairTrainFiles[fileidx][2] + ", batchnum=" + batchidx.ToString());
                     checkData(TriStream.GPU_q0batch, 2);
                     batchidx++;
                 }
