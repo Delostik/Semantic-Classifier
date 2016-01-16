@@ -47,6 +47,18 @@ namespace DSMlib
             if (dnn == null)
                 throw new Exception("Must set dnn model before calling init!");
 
+            //Get all maxsegsizes
+            int maxread;
+            for (int i = 0; i < pairTrainFiles.Count; i++)
+            {
+                for (int j = 0; j < pairTrainFiles[i].Count; j++)
+                {
+                    maxread = SequenceInputStream.get_maxSegsize(pairTrainFiles[i][j]);
+                    if (maxread > PairInputStream.MAXSEGMENT_BATCH)
+                        PairInputStream.MAXSEGMENT_BATCH = maxread;
+                }
+            }
+
             dnn_runData = new DNNRun(dnn);
 
             distances = new CudaPieceFloat(2*ParameterSetting.BATCH_SIZE, true, true);

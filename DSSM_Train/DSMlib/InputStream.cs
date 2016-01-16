@@ -53,6 +53,19 @@ namespace DSMlib
             }
         }
 
+        public static int get_maxSegsize(string fileName)
+        {
+            FileStream mstreamt = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            BinaryReader mreadert = new BinaryReader(mstreamt);
+            mstreamt.Seek(-1 * sizeof(Int32), SeekOrigin.End);
+            int max_Segsize = mreadert.ReadInt32();
+            mreadert.Close();
+            mstreamt.Close();
+            mreadert = null;
+            mstreamt = null;
+            return max_Segsize;
+        }
+
         public void get_dimension(string fileName)
         {
             mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
