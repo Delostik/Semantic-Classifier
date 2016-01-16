@@ -146,6 +146,9 @@ namespace DSMlib
         public unsafe static extern void Matrix_Product(IntPtr a1, IntPtr b1, IntPtr a2, IntPtr b2, IntPtr a3, IntPtr b3, IntPtr c, int batchsize, int m, int n);
                         //, int kept, IntPtr alpha, int ntrial, int BATCH_SIZE, int alpha_index);
 
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Matrix_Product_Sup(IntPtr a, IntPtr b, IntPtr c, int batchsize, int m, int n);
+
 
         
 
@@ -154,7 +157,15 @@ namespace DSMlib
                                         int batchsize, int output_dimension, IntPtr grad, int Feature_Dimension);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Convolution_Matrix_Product_Sup(IntPtr deriv, IntPtr maxpooling_index, IntPtr wordLT, IntPtr Word_Index, int win_size,
+                                        int batchsize, int output_dimension, IntPtr grad, int Feature_Dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void MultiConv_Matrix_Product_INTEX(IntPtr deriv1, IntPtr maxpooling_index1, IntPtr deriv2, IntPtr maxpooling_index2, IntPtr deriv3, IntPtr maxpooling_index3, IntPtr wordLT, IntPtr Word_Index1, IntPtr Word_Index2, IntPtr Word_Index3,
+                                        int batchsize, int output_dimension, IntPtr grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void MultiConv_Matrix_Product_Sup(IntPtr deriv, IntPtr maxpooling_index, IntPtr wordLT, IntPtr Word_Index,
                                         int batchsize, int output_dimension, IntPtr grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
@@ -200,6 +211,9 @@ namespace DSMlib
         
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Matrix_Aggragate(IntPtr a1, IntPtr a2, IntPtr a3, IntPtr b, int batchsize, int m);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Matrix_Aggragate_Sup(IntPtr a, IntPtr b, int batchsize, int m);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Matrix_Add_OFFSET(IntPtr gpu_floats_a, int offset_a, IntPtr gpu_floats_b, int offset_b, int len, float mweight);
@@ -263,6 +277,15 @@ namespace DSMlib
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup_Update(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv1, IntPtr ltDeriv2, IntPtr ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Sparse_Update_Lookup_Sup(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv, int IDnum, int Feature_Dimension, float lr);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Sparse_Update_Lookup_Ada_Sup(IntPtr lookupt, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv, int IDnum, int Feature_Dimension, float lr, IntPtr adaGrad, float eps);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void Sparse_Update_Lookup_Update_Sup(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv, int IDnum, int Feature_Dimension, float lr);
 
     }
 }

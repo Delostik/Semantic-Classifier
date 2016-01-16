@@ -259,6 +259,12 @@ DLLEXP void __stdcall Matrix_Product(float * a1, float * b1, float * a2, float *
 	cuda_Matrix_Product(a1, b1, a2, b2, a3, b3,c, batchsize, m,n); //,kept, alpha, ntrial, BATCH_SIZE, alpha_index);
 }
 
+DLLEXP void __stdcall Matrix_Product_Sup(float * a, float * b, float * c, uint32_t batchsize, uint32_t m, uint32_t n)
+//, uint32_t kept, float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	cuda_Matrix_Product_Sup(a, b, c, batchsize, m, n); //,kept, alpha, ntrial, BATCH_SIZE, alpha_index);
+}
+
 
 DLLEXP void __stdcall SEQ_Sparse_Matrix_Multiply_INTEX(uint32_t * Smp_Index, uint32_t batchsize, uint32_t * Seg_Index, uint32_t * Seg_Margin, float * Seg_Len, 
 												   uint32_t seg_size, uint32_t * Fea_Index, 
@@ -344,11 +350,29 @@ DLLEXP void __stdcall Convolution_Matrix_Product_INTEX(float * deriv1, int * max
 	//,alpha, ntrial, BATCH_SIZE, alpha_index);
 }
 
+
+DLLEXP void __stdcall Convolution_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int win_size, int batchsize, int output_dimension, float * grad, int Feature_Dimension)
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	cuda_Convolution_Matrix_Product_Sup(deriv, maxpooling_index, wordLT, Word_Index, win_size,
+		batchsize, output_dimension, grad, Feature_Dimension);
+	//,alpha, ntrial, BATCH_SIZE, alpha_index);
+}
+
 DLLEXP void __stdcall MultiConv_Matrix_Product_INTEX(float * deriv1, int * maxpooling_index1, float * deriv2, int * maxpooling_index2, float * deriv3, int * maxpooling_index3, float * wordLT,
 	int * Word_Index1, int * Word_Index2, int * Word_Index3, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para)
 	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
 {
 	cuda_MultiConv_Matrix_Product_INTEX(deriv1, maxpooling_index1, deriv2, maxpooling_index2, deriv3, maxpooling_index3, wordLT, Word_Index1, Word_Index2, Word_Index3,
+		batchsize, output_dimension, grad, Feature_Dimension, winsize, fmsize, accu, accu_para);
+}
+
+DLLEXP void __stdcall MultiConv_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para)
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	cuda_MultiConv_Matrix_Product_Sup(deriv, maxpooling_index, wordLT, Word_Index,
 		batchsize, output_dimension, grad, Feature_Dimension, winsize, fmsize, accu, accu_para);
 }
 
@@ -382,6 +406,10 @@ DLLEXP void __stdcall Matrix_Aggragate(float * a1, float * a2, float * a3, float
 	cuda_Matrix_Aggragate(a1, a2, a3, b, batchsize, m);
 }
 
+DLLEXP void __stdcall Matrix_Aggragate_Sup(float * a, float * b, uint32_t batchsize, uint32_t m)
+{
+	cuda_Matrix_Aggragate_Sup(a, b, batchsize, m);
+}
 
 DLLEXP void __stdcall Matrix_Add_OFFSET(float * gpu_floats_a, uint32_t offset_a, float * gpu_floats_b, uint32_t offset_b, uint32_t len, float mweight)
 {
@@ -488,6 +516,22 @@ DLLEXP void __stdcall Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, in
 DLLEXP void __stdcall Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr)
 {
 	cuda_Sparse_Update_Lookup_Update(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, seq2size, IDnum, Feature_Dimension, lr);
+}
+
+
+DLLEXP void __stdcall Sparse_Update_Lookup_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	cuda_Sparse_Update_Lookup_Sup(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr);
+}
+
+DLLEXP void __stdcall Sparse_Update_Lookup_Ada_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps)
+{
+	cuda_Sparse_Update_Lookup_Ada_Sup(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr, adaGrad, eps);
+}
+
+DLLEXP void __stdcall Sparse_Update_Lookup_Update_Sup(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	cuda_Sparse_Update_Lookup_Update_Sup(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr);
 }
 
 /************************************************************/

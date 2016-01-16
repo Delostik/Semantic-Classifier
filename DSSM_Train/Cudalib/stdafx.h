@@ -91,6 +91,7 @@ void cuda_FillOut_Dist_NCE(float* dist, uint32_t* neg_list, uint32_t nTrailPlus1
 
 void cuda_Matrix_Product(float * a1, float * b1, float * a2, float * b2, float * a3, float * b3, float * c, uint32_t batchsize, uint32_t m, uint32_t n); //, uint32_t kept, float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index);
 
+void cuda_Matrix_Product_Sup(float * a, float * b, float * c, uint32_t batchsize, uint32_t m, uint32_t n); //, uint32_t kept, float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index);
 
 
 void cuda_SEQ_Sparse_Matrix_Multiply_INTEX(uint32_t * Smp_Index, uint32_t batchsize, uint32_t * Seg_Index, uint32_t * Seg_Margin, float * Seg_Len, uint32_t seg_size, uint32_t * Fea_Index, 
@@ -121,8 +122,14 @@ void cuda_Convolution_Matrix_Product_INTEX(float * deriv1, int * maxpooling_inde
 												int * Word_Index1, int * Word_Index2, int * Word_Index3, int win_size, int batchsize, int output_dimension, float * grad, int Feature_Dimension);
 										//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index);
 
+void cuda_Convolution_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int win_size, int batchsize, int output_dimension, float * grad, int Feature_Dimension);
+
 void cuda_MultiConv_Matrix_Product_INTEX(float * deriv1, int * maxpooling_index1, float * deriv2, int * maxpooling_index2, float * deriv3, int * maxpooling_index3, float * wordLT,
 	int * Word_Index1, int * Word_Index2, int * Word_Index3, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para);
+
+void cuda_MultiConv_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para);
 
 void cuda_MultiConv_Compute_WVDERIV(float * deriv, int * maxpooling_index, float * weight, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int * winsizes, int * fmsizes);
 
@@ -135,6 +142,8 @@ void cuda_Matrix_WeightAdd_EX(float * gpu_floats_a, float * gpu_floats_b, int * 
 void cuda_Sparse2Dense_Matrix(int * Smp_Idx, int * Fea_Idx, float * Fea_Value, float * matrix, int batchsize, int outputDimension);
 
 void cuda_Matrix_Aggragate(float * a1, float * a2, float * a3, float * b, uint32_t batchsize, uint32_t m);
+
+void cuda_Matrix_Aggragate_Sup(float * a, float * b, uint32_t batchsize, uint32_t m);
 
 void cuda_Matrix_Add_OFFSET(float * gpu_floats_a, uint32_t offset_a, float * gpu_floats_b, uint32_t offset_b, int len, float mweight);
 
@@ -169,6 +178,13 @@ void cuda_Sparse_Update_Lookup(float * lookupt, int * Fea_ID, int * Fea_Idx, int
 void cuda_Sparse_Update_Lookup_Ada(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps);
 
 void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv1, float * ltDeriv2, float * ltDeriv3, int seq1size, int seq2size, int IDnum, int Feature_Dimension, float lr);
+
+
+void cuda_Sparse_Update_Lookup_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr);
+
+void cuda_Sparse_Update_Lookup_Ada_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps);
+
+void cuda_Sparse_Update_Lookup_Update_Sup(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr);
 
 
 void cuda_Init_Float_Array(float * target, float val, int size);

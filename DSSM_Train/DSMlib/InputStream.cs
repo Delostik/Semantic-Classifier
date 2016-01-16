@@ -164,10 +164,11 @@ namespace DSMlib
         {
             mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
             mreader = new BinaryReader(mstream);
-            mstream.Seek(-2 * sizeof(Int32), SeekOrigin.End);
+            mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
 
-            int batch_size = mreader.ReadInt32();
             nLine = mreader.ReadInt32();
+            int batch_size = mreader.ReadInt32();
+
             if (batch_size != ParameterSetting.BATCH_SIZE)
             {
                 throw new Exception(string.Format(
@@ -182,6 +183,26 @@ namespace DSMlib
             BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
             LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
             BATCH_INDEX = 0;
+        }
+
+        public int get_dimension2(string fileName)
+        {
+            mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            mreader = new BinaryReader(mstream);
+            mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
+
+            nLine = mreader.ReadInt32();
+            int batch_size = mreader.ReadInt32();
+
+            
+            MAXSEGMENT_BATCH = mreader.ReadInt32();
+
+            Data = new LabeledBatchSample_Input(batch_size, MAXSEGMENT_BATCH);
+
+            BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
+            LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
+            BATCH_INDEX = 0;
+            return batch_size;
         }
 
         public void Init()
@@ -721,7 +742,9 @@ namespace DSMlib
     {
         public LabeledSequenceInputStream lstream = new LabeledSequenceInputStream();
 
-        public static int MAXSEGMENT_BATCH = 40000;
+        public int BatchSize = 0;
+        public bool isTrain;
+        public int MAXSEGMENT_BATCH = 40000;
         //public static int QUERY_MAXSEGMENT_BATCH = 40000;
         //public static int DOC_MAXSEGMENT_BATCH = 40000;
 
@@ -731,6 +754,11 @@ namespace DSMlib
 
         /**************** Associated streams *************/
         public StreamReader srNCEProbDist = null;
+
+        public LabeledInputStream(bool isTrain)
+        {
+            this.isTrain = isTrain;
+        }
 
         ~LabeledInputStream()
         {
@@ -763,7 +791,7 @@ namespace DSMlib
         #endregion
 
         /// <summary>
-        /// Used by valid input
+        /// Used by valid input, not used~~~~~~~~~~~~~
         /// </summary>
         /// <param name="qFileName"></param>
         /// <param name="dFileName"></param>
@@ -797,7 +825,10 @@ namespace DSMlib
         void Load_PairData(string lFileName, string nceProbDistFile)
         {
             CloseAllStreams();
-            lstream.get_dimension(lFileName);
+            if (isTrain)
+                lstream.get_dimension(lFileName);
+            else
+                BatchSize = lstream.get_dimension2(lFileName);
             if (nceProbDistFile != null)
             {
                 this.srNCEProbDist = new StreamReader(nceProbDistFile);

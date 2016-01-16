@@ -1041,6 +1041,48 @@ void cuda_Matrix_Product(float * a1, float * b1, float * a2, float * b2, float *
 		//, kept, alpha, ntrial, BATCH_SIZE, alpha_index);
 }
 
+
+__global__ void cuda_matrix_product_sup(float * a, float * b, float * c, uint32_t batchsize, uint32_t m, uint32_t n)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	if (idx < n && idy < m)
+	{
+		float sum = 0;
+		for (uint32_t i = 0; i < batchsize; i++)
+		{
+			sum += a[m*i + idy] * b[n*i + idx];
+		}
+		//uint32_t row = idy; // / n;
+		//uint32_t col = idx;// % n;
+		//float *a_iter = a+row;
+		//float *b_iter = b+col;
+		//float *a_end_pt = a_iter + (m*batchsize);
+		//while(a_iter < a_end_pt)
+		//{
+		//	sum += (*a_iter) * (*b_iter);
+		//	a_iter += m;
+		//	b_iter += n;
+		//}
+		c[idy * n + idx] = sum;
+	}
+}
+
+
+void cuda_Matrix_Product_Sup(float * a, float * b, float * c, uint32_t batchsize, uint32_t m, uint32_t n)
+//, uint32_t kept, float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((n + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (m + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_matrix_product_sup<<<block_tail, thread_tail>>>(a, b, c, batchsize, m, n);
+	//, kept, alpha, ntrial, BATCH_SIZE, alpha_index);
+}
+
+
 __global__ void cuda_convolution_matrix_product_INTEX(float * deriv1, int * maxpooling_index1, float * deriv2, int * maxpooling_index2, float * deriv3, int * maxpooling_index3, float * wordLT, int * Word_Index1, int * Word_Index2, int * Word_Index3, int win_size,
 										int batchsize, int output_dimension, float * grad, int Feature_Dimension, int weightDim)
 										//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
@@ -1087,6 +1129,46 @@ void cuda_Convolution_Matrix_Product_INTEX(float * deriv1, int * maxpooling_inde
 }
 
 
+__global__ void cuda_convolution_matrix_product_sup(float * deriv, int * maxpooling_index, float * wordLT, int * Word_Index, int win_size,
+	int batchsize, int output_dimension, float * grad, int Feature_Dimension, int weightDim)
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	if (idx < output_dimension && idy < weightDim)
+	{
+		float sum = 0;
+		int target_word1, widx1, wordpos, offset, precompIdx;
+		wordpos = idy / Feature_Dimension;
+		offset = idy % Feature_Dimension;
+		for (int b = 0; b<batchsize; b++)
+		{
+			precompIdx = b * output_dimension + idx;
+			target_word1 = maxpooling_index[precompIdx];
+
+
+			int widx1 = Word_Index[target_word1 + wordpos];
+
+			sum += deriv[precompIdx] * wordLT[Feature_Dimension * widx1 + offset];
+		}
+		grad[idy * output_dimension + idx] = sum;
+	}
+}
+
+void cuda_Convolution_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int win_size, int batchsize, int output_dimension, float * grad, int Feature_Dimension)
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	int weightDim = Feature_Dimension * win_size;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (weightDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_convolution_matrix_product_sup<<<block_tail, thread_tail>>>(deriv, maxpooling_index, wordLT, Word_Index, win_size,
+		batchsize, output_dimension, grad, Feature_Dimension, weightDim);
+	//,alpha, ntrial, BATCH_SIZE, alpha_index); 
+}
+
+
 __global__ void cuda_multiconv_matrix_product_INTEX(float * deriv1, int * maxpooling_index1, float * deriv2, int * maxpooling_index2, float * deriv3, int * maxpooling_index3, float * wordLT, int * Word_Index1, int * Word_Index2, int * Word_Index3, int win_size,
 	int batchsize, int output_dimension, float * grad, int Feature_Dimension, int weightDim, int currOuputDim, int pastOutdim)
 	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
@@ -1129,6 +1211,45 @@ void cuda_MultiConv_Matrix_Product_INTEX(float * deriv1, int * maxpooling_index1
 
 	cuda_multiconv_matrix_product_INTEX<<<block_tail, thread_tail>>>(deriv1, maxpooling_index1, deriv2, maxpooling_index2, deriv3, maxpooling_index3, wordLT, Word_Index1, Word_Index2, Word_Index3, winsize,
 		batchsize, output_dimension, (grad + accu_para), Feature_Dimension, weightDim, fmsize, accu);	
+}
+
+
+__global__ void cuda_multiconv_matrix_product_sup(float * deriv, int * maxpooling_index, float * wordLT, int * Word_Index, int win_size,
+	int batchsize, int output_dimension, float * grad, int Feature_Dimension, int weightDim, int currOuputDim, int pastOutdim)
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	if (idx < weightDim && idy < currOuputDim)
+	{
+		float sum = 0;
+		int target_word1, widx1, wordpos, offset, precompIdx;
+
+		wordpos = idx / Feature_Dimension;
+		offset = idx % Feature_Dimension;
+		for (int b = 0; b<batchsize; b++)
+		{
+			precompIdx = b * output_dimension + idy + pastOutdim;
+			target_word1 = maxpooling_index[precompIdx];
+
+			int widx1 = Word_Index[target_word1 + wordpos];
+
+			sum += deriv[precompIdx] * wordLT[Feature_Dimension * widx1 + offset];
+		}
+		grad[idy * weightDim + idx] = sum;
+	}
+}
+
+void cuda_MultiConv_Matrix_Product_Sup(float * deriv, int * maxpooling_index, float * wordLT,
+	int * Word_Index, int batchsize, int output_dimension, float * grad, int Feature_Dimension, int winsize, int fmsize, int accu, int accu_para) // the last two pointers are on host
+	//,float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	int weightDim = Feature_Dimension * winsize;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((weightDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (fmsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	cuda_multiconv_matrix_product_sup<<<block_tail, thread_tail>>>(deriv, maxpooling_index, wordLT, Word_Index, winsize,
+		batchsize, output_dimension, (grad + accu_para), Feature_Dimension, weightDim, fmsize, accu);
 }
 
 
@@ -1606,6 +1727,30 @@ void cuda_Matrix_Aggragate(float * a1, float * a2, float * a3, float * b, uint32
 	uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
 	uint32_t nBlockPerGrid = (m + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
 	cuda_matrix_aggragate<<<nBlockPerGrid ,DEFAULT_THREAD_PER_BLOCK >>>(a1,a2,a3,b,batchsize,m ); //,kept, alpha, ntrial, BATCH_SIZE, alpha_index);
+}
+
+__global__ void cuda_matrix_aggragate_sup(float * a, float * b, uint32_t batchsize, uint32_t m)
+//uint32_t kept, float * alpha, uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < m)
+	{
+		float sum = 0;
+		for (uint32_t i = 0; i<batchsize; i++)
+		{
+			sum += a[i * m + idx]; //* alpha[alpha_index * BATCH_SIZE + i];
+		}
+		b[idx] = sum;
+	}
+}
+
+void cuda_Matrix_Aggragate_Sup(float * a, float * b, uint32_t batchsize, uint32_t m)
+//, uint32_t kept, float * alpha, 
+//		  uint32_t ntrial, uint32_t BATCH_SIZE, uint32_t alpha_index)
+{
+	uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	uint32_t nBlockPerGrid = (m + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_matrix_aggragate_sup<<<nBlockPerGrid, DEFAULT_THREAD_PER_BLOCK>>>(a, b, batchsize, m); //,kept, alpha, ntrial, BATCH_SIZE, alpha_index);
 }
 
 
@@ -2357,6 +2502,99 @@ void cuda_Sparse_Update_Lookup_Update(float * lookupt_update, int * Fea_ID, int 
 	cuda_sparse_update_lookup_update<<<block_tail, thread_tail >>>(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv1, ltDeriv2, ltDeriv3, seq1size, sq1sq2, IDnum, Feature_Dimension, lr);
 }
 
+
+
+__global__ void cuda_sparse_update_lookup_sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < Feature_Dimension && idy < IDnum)
+	{
+		int colend = Fea_Idx[idy];
+		int colbegin = 0;
+		if (idy > 0)
+			colbegin = Fea_Idx[idy - 1];
+		float accu = 0;
+		for (int t = colbegin; t < colend; t++)
+		{
+			accu += ltDeriv[Seq[t] * Feature_Dimension + idx];
+		}
+		//int wid = Fea_ID[idy];
+		int updatepos = Fea_ID[idy] * Feature_Dimension + idx;
+		lookupt[updatepos] = lookupt[updatepos] - lr * accu;
+	}
+}
+
+void cuda_Sparse_Update_Lookup_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	
+	cuda_sparse_update_lookup_sup<<<block_tail, thread_tail>>>(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr);
+}
+
+
+__global__ void cuda_sparse_update_lookup_ada_sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < Feature_Dimension && idy < IDnum)
+	{
+		int colend = Fea_Idx[idy];
+		int colbegin = 0;
+		if (idy > 0)
+			colbegin = Fea_Idx[idy - 1];
+		float accu = 0;
+		for (int t = colbegin; t < colend; t++)
+		{
+			accu += ltDeriv[Seq[t] * Feature_Dimension + idx];
+		}
+		//int wid = Fea_ID[idy];
+		int updatepos = Fea_ID[idy] * Feature_Dimension + idx;
+		float tempf = adaGrad[updatepos] + accu * accu;
+		adaGrad[updatepos] = tempf;
+		lookupt[updatepos] = lookupt[updatepos] - (lr * accu / (sqrtf(tempf) + eps));
+	}
+}
+
+void cuda_Sparse_Update_Lookup_Ada_Sup(float * lookupt, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr, float * adaGrad, float eps)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	
+	cuda_sparse_update_lookup_ada_sup<<<block_tail, thread_tail>>>(lookupt, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr, adaGrad, eps);
+}
+
+
+
+__global__ void cuda_sparse_update_lookup_update_sup(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if (idx < Feature_Dimension && idy < IDnum)
+	{
+		int colend = Fea_Idx[idy];
+		int colbegin = 0;
+		if (idy > 0)
+			colbegin = Fea_Idx[idy - 1];
+		float accu = 0;
+		for (int t = colbegin; t < colend; t++)
+		{			
+			accu += ltDeriv[Seq[t] * Feature_Dimension + idx];			
+		}
+		//int wid = Fea_ID[idy];
+		int updatepos = Fea_ID[idy] * Feature_Dimension + idx;
+		lookupt_update[updatepos] = lookupt_update[updatepos] + lr * accu;
+	}
+}
+
+void cuda_Sparse_Update_Lookup_Update_Sup(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((Feature_Dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (IDnum + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	
+	cuda_sparse_update_lookup_update_sup<<<block_tail, thread_tail>>>(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr);
+}
 
 
 __global__ void cuda_init_float_array(float * target, float val, int size)

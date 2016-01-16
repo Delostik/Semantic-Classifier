@@ -14,16 +14,24 @@ namespace DSMlib
     class Weak_DNNTrain : DNN_Train
     {
         DNNRun dnn_runData = null;
+
+        // for validation
+        DNNRunForward dnn_forward = null;
         
         DNN dnn = null;
 
         PairInputStream TriStream = new PairInputStream();
         
-        LabeledInputStream validStream = new LabeledInputStream();
+        // !!!! validStream must only contain one batch!
+        LabeledInputStream validStream = new LabeledInputStream(false);
 
         public CudaPieceFloat distances = null;
         public IntPtr Distances {   get { return distances.CudaPtr;}   }
         public float[] Distance_Back { get { return distances.MemPtr;}   }
+
+        public CudaPieceFloat validDistances = null;
+        public IntPtr ValidDistances { get { return validDistances.CudaPtr; } }
+        public float[] ValidDistance_Back { get { return validDistances.MemPtr; } }
 
         //public CudaPieceFloat classWeights = null;
         //public IntPtr ClassWeights { get { return classWeights.CudaPtr; } }
@@ -38,7 +46,7 @@ namespace DSMlib
         public Weak_DNNTrain(DNN dnn)
         {
             this.dnn = dnn;
-            Init();
+            //Init();
         }
 
 
@@ -60,8 +68,13 @@ namespace DSMlib
             }
 
             dnn_runData = new DNNRun(dnn);
-
             distances = new CudaPieceFloat(2*ParameterSetting.BATCH_SIZE, true, true);
+
+            if (ParameterSetting.ISVALIDATE)
+            {
+                dnn_forward = new DNNRunForward(dnn, validStream.BatchSize, validStream.MAXSEGMENT_BATCH);
+                validDistances = new CudaPieceFloat((validStream.BatchSize * validStream.BatchSize - validStream.BatchSize) / 2, true, false);
+            }
         }
 
 
@@ -76,11 +89,52 @@ namespace DSMlib
                 distances.Dispose();
 
             TriStream.Dispose();
+
             if (ParameterSetting.ISVALIDATE)
             {
+                if (validDistances != null)
+                    validDistances.Dispose();
                 validStream.Dispose();
             }
 
+        }
+
+        unsafe void calculate_all_distances(float[] vectorRep, float[] allDist)
+        {
+            int THREAD_NUM = ParameterSetting.BasicMathLibThreadNum;
+            int bsize = validStream.GPU_lbatch.batchsize;
+            int total = bsize * bsize;
+            int vecdim = dnn.OutputLayerSize;
+            int process_len = (total + THREAD_NUM - 1) / THREAD_NUM;
+            Parallel.For(0, THREAD_NUM, thread_idx =>
+            {
+                for (int t = 0; t < process_len; t++)
+                {
+                    int id = thread_idx * process_len + t;
+                    if (id < total)
+                    {
+                        int col = id / bsize;
+                        int row = id % bsize;
+
+                        if (col < row) // in the lower triangle
+                        {
+                            int pos = (col * (2 * bsize - col - 1) / 2) + row - (col + 1);
+                            int rowVstart = vecdim * row;
+                            int colVstart = vecdim * col;
+                            allDist[pos] = 0;
+                            for (int j = 0; j < vecdim; j++)
+                            {
+                                allDist[pos] += (vectorRep[rowVstart + j] - vectorRep[colVstart + j]) * (vectorRep[rowVstart + j] - vectorRep[colVstart + j]);
+                            }
+                            allDist[pos] = (float)Math.Sqrt(allDist[pos]);
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            });
         }
 
         unsafe void calculate_distances(int batchsize)
@@ -231,16 +285,16 @@ namespace DSMlib
         }
 
 
-        public override void LoadValidateData(string[] files)
+        public override void LoadValidateData(string[] file)
         {
             // under construction
             Program.timer.Reset();
             Program.timer.Start();
-            //validStream.Load_Validate_PairData(files[0], files[1], files[2], Evaluation_Type.PairScore); 
+            validStream.Load_Train_TriData(file[0], null); 
             
             //ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR);
             Program.timer.Stop();
-            Program.Print("loading Validate doc query stream done : " + Program.timer.Elapsed.ToString());
+            Program.Print("loading Validate stream done : " + Program.timer.Elapsed.ToString());
         }
 
         /// <summary>
@@ -249,13 +303,47 @@ namespace DSMlib
         /// <returns></returns>
         public override float Evaluate()
         {
- 	        // under construction
-            return 1.0f;
+            Program.timer.Reset();
+            Program.timer.Start();
+            Program.Print("Strat evaluating...");
+ 	        validStream.Init_Batch();
+            validStream.Next_Batch();
+            dnn_forward.forward_activate(validStream.GPU_lbatch);
+            dnn_forward.neurallayers.Last().Output.CopyOutFromCuda();
+            calculate_all_distances(dnn_forward.neurallayers.Last().Output.MemPtr, ValidDistance_Back);
+            float intraDist = 0, interDist = 0;
+            int intraPairs = 0, interPairs = 0;
+            int[] labels = validStream.GPU_lbatch.Emo_Mem;
+
+            int pos;
+            for (int col = 0; col < validStream.GPU_lbatch.batchsize; col++)
+            {
+                for (int row = col+1; row < validStream.GPU_lbatch.batchsize; row++)
+                {
+                    pos = (col * (2 * validStream.GPU_lbatch.batchsize - col - 1) / 2) + row - (col + 1);
+                    if (labels[row] == labels[col])
+                    {
+                        intraDist += ValidDistance_Back[pos];
+                        intraPairs++;
+                    }
+                    else
+                    {
+                        interDist += ValidDistance_Back[pos];
+                        interPairs++;
+                    }
+                }
+            }
+
+            Program.timer.Stop();
+            Program.Print("Validation done : " + Program.timer.Elapsed.ToString());
+
+            return (interDist / interPairs) / (intraDist / intraPairs);           
+
         }
 
 
         /// <summary>
-        /// Evaluate process version 2. Don't use validation streams. But using saved models directly.        
+        /// Evaluate process version 2. Don't use validation streams. But using saved models directly. (not used)       
         /// </summary>
         /// <param name="srcModelPath"></param>
         /// <param name="tgtModelPath"></param>
@@ -419,16 +507,9 @@ namespace DSMlib
                 
                 if (ParameterSetting.ISVALIDATE)
                 {
-                    Program.Print("Start validation process ...");
-                    if (!ParameterSetting.VALIDATE_MODEL_ONLY)
-                    {
-                        VALIDATION_Eval = Evaluate();
-                    }
-                    else
-                    {
-                        VALIDATION_Eval = EvaluateModelOnly(dssmModelPath);
-                    }
+                    VALIDATION_Eval = Evaluate();
                     Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
+                    
                 }
                 File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + 0.ToString(), LearningParameters.lr_mid.ToString());
                 lastRunStopIter = 0;
@@ -443,15 +524,9 @@ namespace DSMlib
                         Program.Print("Loading from previously trained Iter " + iter.ToString());
                         string dssmModelPath = ComposeDSSMModelPaths(iter);
                         LoadModel(dssmModelPath, ref dnn, false);
-                        Program.Print("Start validation process ...");
-                        if (!ParameterSetting.VALIDATE_MODEL_ONLY)
-                        {
-                            VALIDATION_Eval = Evaluate();
-                        }
-                        else
-                        {
-                            VALIDATION_Eval = EvaluateModelOnly(dssmModelPath);
-                        }
+                        //Program.Print("Start validation process ...");
+                        VALIDATION_Eval = Evaluate();
+                        
                         Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
                         if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()))
                         {
@@ -470,6 +545,11 @@ namespace DSMlib
                     {
                         LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()));
                     }
+                }
+
+                if (ParameterSetting.ISVALIDATE && ParameterSetting.VALIDATE_MODEL_ONLY)
+                {
+                    return;
                 }
             }
 
@@ -538,16 +618,9 @@ namespace DSMlib
 
                 if (ParameterSetting.ISVALIDATE)
                 {
-                    Program.Print("Start validation process ...");
-                    if (!ParameterSetting.VALIDATE_MODEL_ONLY)
-                    {
-                        VALIDATION_Eval = Evaluate();
-                    }
-                    else
-                    {
-                        // not used
-                        VALIDATION_Eval = EvaluateModelOnly("");
-                    }
+                    //Program.Print("Start validation process ...");
+                    VALIDATION_Eval = Evaluate();
+                    
                     Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
 
                     if (ParameterSetting.updateScheme != 2)

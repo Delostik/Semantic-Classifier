@@ -51,11 +51,14 @@ namespace DSMlib
 
         /*----------  Mainly used in backward propagation, computing weight derivative  --------------*/
         //void SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(BatchSample_Input input_batch, CudaPieceFloat weightDeriv, CudaPieceFloat upperOutputErrorDeriv, int inputDimension, int outputDimension, int winSize);
-        void Convolution_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension);
+        void Convolution_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2, CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension);
+        void Convolution_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension);
         void MultiConv_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para);
+        void MultiConv_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para);
         void MultiConv_Compute_WVDERIV(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, CudaPieceFloat weight, int batchsize, int outputDimension, CudaPieceFloat inputDeriv, int inputDimension, CudaPieceInt winsizes, CudaPieceInt fmsizes);
         void Conv_Compute_WVDERIV(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, CudaPieceFloat weight, int batchsize, int outputDimension, CudaPieceFloat inputDeriv, int inputDimension, int winsize);
         void Matrix_Product(CudaPieceFloat lowerOutput1, CudaPieceFloat upperOutputErrorDeriv1, CudaPieceFloat lowerOutput2, CudaPieceFloat upperOutputErrorDeriv2,CudaPieceFloat lowerOutput3, CudaPieceFloat upperOutputErrorDeriv3,CudaPieceFloat weightDeriv, int batchsize, int inputDimension, int outputDimension);
+        void Matrix_Product_Sup(CudaPieceFloat lowerOutput, CudaPieceFloat upperOutputErrorDeriv, CudaPieceFloat weightDeriv, int batchsize, int inputDimension, int outputDimension);
         
         /*----------  Mainly used in backward propagation, computing weight updates and updating weights --------------*/
         void Scale_Matrix(CudaPieceFloat matrix, int inputDimension, int outputDimnsion, float momentum );
@@ -70,6 +73,8 @@ namespace DSMlib
         void Zero(CudaPieceFloat matrix, int size);
 
         void Matrix_Aggragate(CudaPieceFloat a1, CudaPieceFloat a2, CudaPieceFloat a3, CudaPieceFloat b, int batchsize, int m);
+
+        void Matrix_Aggragate_Sup(CudaPieceFloat a, CudaPieceFloat b, int batchsize, int m);
 
         void Cosine_Similarity_EX_Full(CudaPieceFloat a, CudaPieceFloat b, CudaPieceInt neg_list, CudaPieceFloat c, int nTrial, int BATCHSIZE, 
                 int batchsize, int dimension, float eps);
@@ -110,6 +115,13 @@ namespace DSMlib
         void Sparse_Update_Lookup_Ada(LookupTab table, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr, float eps);
 
         void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr);
+
+        void Sparse_Update_Lookup_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr);
+
+        void Sparse_Update_Lookup_Ada_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr, float eps);
+
+        void Sparse_Update_Lookup_Update_Sup(CudaPieceFloat tabUpdate, LookupTabRunDataSup tableD, int Feature_Dimension, float lr);
+
     }
 
     static class MathOperatorManager
@@ -336,9 +348,21 @@ namespace DSMlib
                                      batchsize, outputDimension, weightDeriv.CudaPtr, inputDimension);
         }
 
+        public void Convolution_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension)
+        {
+            Cudalib.Convolution_Matrix_Product_Sup(upperOutputErrorDeriv.CudaPtr, layerMaxPooling_Index.CudaPtr, wordLT.LookupTable, input_batch.Word_Idx, winSize,
+                                     batchsize, outputDimension, weightDeriv.CudaPtr, inputDimension);
+        }
+
         public void MultiConv_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para)
         {
             Cudalib.MultiConv_Matrix_Product_INTEX(upperOutputErrorDeriv1.CudaPtr, layerMaxPooling_Index1.CudaPtr, upperOutputErrorDeriv2.CudaPtr, layerMaxPooling_Index2.CudaPtr, upperOutputErrorDeriv3.CudaPtr, layerMaxPooling_Index3.CudaPtr, wordLT.LookupTable, input_batch1.Word_Idx, input_batch2.Word_Idx, input_batch3.Word_Idx,
+                                    batchsize, outputDimension, weightDeriv.CudaPtr, inputDimension, winsize, fmsize, accu, accu_para);
+        }
+
+        public void MultiConv_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para)
+        {
+            Cudalib.MultiConv_Matrix_Product_Sup(upperOutputErrorDeriv.CudaPtr, layerMaxPooling_Index.CudaPtr, wordLT.LookupTable, input_batch.Word_Idx,
                                     batchsize, outputDimension, weightDeriv.CudaPtr, inputDimension, winsize, fmsize, accu, accu_para);
         }
 
@@ -359,9 +383,20 @@ namespace DSMlib
                         batchsize, inputDimension, outputDimension);
         }
 
+        public void Matrix_Product_Sup(CudaPieceFloat lowerOutput, CudaPieceFloat upperOutputErrorDeriv, CudaPieceFloat weightDeriv, int batchsize, int inputDimension, int outputDimension)
+        {
+            Cudalib.Matrix_Product_Sup(lowerOutput.CudaPtr, upperOutputErrorDeriv.CudaPtr, weightDeriv.CudaPtr,
+                        batchsize, inputDimension, outputDimension);
+        }
+
         public void Matrix_Aggragate(CudaPieceFloat a1, CudaPieceFloat a2, CudaPieceFloat a3, CudaPieceFloat b, int batchsize, int m)
         {
             Cudalib.Matrix_Aggragate(a1.CudaPtr, a2.CudaPtr, a3.CudaPtr, b.CudaPtr, batchsize, m);
+        }
+
+        public void Matrix_Aggragate_Sup(CudaPieceFloat a, CudaPieceFloat b, int batchsize, int m)
+        {
+            Cudalib.Matrix_Aggragate_Sup(a.CudaPtr, b.CudaPtr, batchsize, m);
         }
 
         public void Scale_Matrix(CudaPieceFloat matrix, int inputDimension, int outputDimnsion, float momentum)
@@ -490,6 +525,21 @@ namespace DSMlib
         public void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
         {
             Cudalib.Sparse_Update_Lookup_Update(tabUpdate.CudaPtr, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv[0].CudaPtr, tableD.InputDeriv[1].CudaPtr, tableD.InputDeriv[2].CudaPtr, seq1size, seq2size, tableD.uniqueNum, Feature_Dimension, lr);
+        }
+
+        public void Sparse_Update_Lookup_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr)
+        {
+            Cudalib.Sparse_Update_Lookup_Sup(table.LookupTable, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv.CudaPtr, tableD.uniqueNum, Feature_Dimension, lr);
+        }
+
+        public void Sparse_Update_Lookup_Ada_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr, float eps)
+        {
+            Cudalib.Sparse_Update_Lookup_Ada_Sup(table.LookupTable, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv.CudaPtr, tableD.uniqueNum, Feature_Dimension, lr, tableD.TabAdaGrad.CudaPtr, eps);
+        }
+
+        public void Sparse_Update_Lookup_Update_Sup(CudaPieceFloat tabUpdate, LookupTabRunDataSup tableD, int Feature_Dimension, float lr)
+        {
+            Cudalib.Sparse_Update_Lookup_Update_Sup(tabUpdate.CudaPtr, tableD.uniqueWordID.CudaPtr, tableD.uniqueWordIdx.CudaPtr, tableD.Sequence.CudaPtr, tableD.InputDeriv.CudaPtr, tableD.uniqueNum, Feature_Dimension, lr);
         }
     }
 
@@ -715,7 +765,19 @@ namespace DSMlib
             //                         batchsize, outputDimension, input_batch.Fea_Idx_Mem, input_batch.Fea_Value_Mem, weightDeriv.MemPtr, inputDimension);
         }
 
+        public void Convolution_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int winSize, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension)
+        {
+            // not implemented
+            //BasicMathlib.Convolution_Sparse_Matrix_Product_INTEX(upperOutputErrorDeriv.MemPtr, layerMaxPooling_Index.MemPtr, input_batch.Seg_Idx_Mem, input_batch.Seg_Margin_Mem, input_batch.segsize, winSize,
+            //                         batchsize, outputDimension, input_batch.Fea_Idx_Mem, input_batch.Fea_Value_Mem, weightDeriv.MemPtr, inputDimension);
+        }
+
         public void MultiConv_Matrix_Product_INTEX(CudaPieceFloat upperOutputErrorDeriv1, CudaPieceInt layerMaxPooling_Index1, CudaPieceFloat upperOutputErrorDeriv2, CudaPieceInt layerMaxPooling_Index2,CudaPieceFloat upperOutputErrorDeriv3, CudaPieceInt layerMaxPooling_Index3, LookupTab wordLT, BatchSample_Input input_batch1, BatchSample_Input input_batch2, BatchSample_Input input_batch3, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para)
+        {
+            //not implemented
+        }
+
+        public void MultiConv_Matrix_Product_Sup(CudaPieceFloat upperOutputErrorDeriv, CudaPieceInt layerMaxPooling_Index, LookupTab wordLT, BatchSample_Input input_batch, int batchsize, int outputDimension, CudaPieceFloat weightDeriv, int inputDimension, int winsize, int fmsize, int accu, int accu_para)
         {
             //not implemented
         }
@@ -735,6 +797,14 @@ namespace DSMlib
             // not implemented
             //BasicMathlib.Matrix_Product(lowerOutput.MemPtr, upperOutputErrorDeriv.MemPtr, weightDeriv.MemPtr,
             //            batchsize, inputDimension, outputDimension);
+
+        }
+
+        public void Matrix_Product_Sup(CudaPieceFloat lowerOutput, CudaPieceFloat upperOutputErrorDeriv, CudaPieceFloat weightDeriv, int batchsize, int inputDimension, int outputDimension)
+        {
+            
+            BasicMathlib.Matrix_Product(lowerOutput.MemPtr, upperOutputErrorDeriv.MemPtr, weightDeriv.MemPtr,
+                        batchsize, inputDimension, outputDimension);
 
         }
 
@@ -777,6 +847,12 @@ namespace DSMlib
         }
         
         public void Matrix_Aggragate(CudaPieceFloat a1, CudaPieceFloat a2, CudaPieceFloat a3, CudaPieceFloat b, int batchsize, int m)
+        {
+            // not implemented
+            //BasicMathlib.Matrix_Aggragate(a.MemPtr, b.MemPtr, batchsize, m);
+        }
+
+        public void Matrix_Aggragate_Sup(CudaPieceFloat a, CudaPieceFloat b, int batchsize, int m)
         {
             // not implemented
             //BasicMathlib.Matrix_Aggragate(a.MemPtr, b.MemPtr, batchsize, m);
@@ -828,6 +904,21 @@ namespace DSMlib
         }
 
         public void Sparse_Update_Lookup_Update(CudaPieceFloat tabUpdate, LookupTabRunData tableD, int seq1size, int seq2size, int Feature_Dimension, float lr)
+        {
+            // not implemented
+        }
+
+        public void Sparse_Update_Lookup_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr)
+        {
+            // not implemented
+        }
+
+        public void Sparse_Update_Lookup_Ada_Sup(LookupTab table, LookupTabRunDataSup tableD, int Feature_Dimension, float lr, float eps)
+        {
+            // not implemented
+        }
+
+        public void Sparse_Update_Lookup_Update_Sup(CudaPieceFloat tabUpdate, LookupTabRunDataSup tableD, int Feature_Dimension, float lr)
         {
             // not implemented
         }

@@ -12,10 +12,10 @@ namespace DSMlib
     {
         public int batchsize = ParameterSetting.BATCH_SIZE;
         public int elementSize;
-        CudaPieceInt word_Idx;
-        CudaPieceInt sample_Idx;
-        CudaPieceInt fea_Idx;
-        CudaPieceInt seg_Margin;
+        protected CudaPieceInt word_Idx;
+        protected CudaPieceInt sample_Idx;
+        protected CudaPieceInt fea_Idx;
+        protected CudaPieceInt seg_Margin;
 
         public int[] Fea_Mem { get { return fea_Idx.MemPtr; } }
         public int[] Sample_Mem { get { return sample_Idx.MemPtr; } }
@@ -40,7 +40,7 @@ namespace DSMlib
             Dispose();
         }
 
-        public void Load(BinaryReader mreader, int batchsize)
+        public virtual void Load(BinaryReader mreader, int batchsize)
         {
             elementSize = mreader.ReadInt32();
             this.batchsize = mreader.ReadInt32();
@@ -77,7 +77,7 @@ namespace DSMlib
             }
         }
 
-        public void Batch_In_GPU()
+        public virtual void Batch_In_GPU()
         {
             sample_Idx.CopyIntoCuda();
             fea_Idx.CopyIntoCuda();
@@ -87,41 +87,41 @@ namespace DSMlib
 
         public void Dispose()
         {
-            sample_Idx.Dispose();
-            fea_Idx.Dispose();
-            word_Idx.Dispose();
-            seg_Margin.Dispose();
+            if (sample_Idx != null)
+            {
+                sample_Idx.Dispose();
+                sample_Idx = null;
+            }
+            if (fea_Idx != null)
+            {
+                fea_Idx.Dispose();
+                fea_Idx = null;
+            }
+            if (word_Idx != null)
+            {
+                word_Idx.Dispose();
+                word_Idx = null;
+            }
+            if (seg_Margin != null)
+            {
+                seg_Margin.Dispose();
+                seg_Margin = null;
+            }
         }
     }
 
-    public class LabeledBatchSample_Input : IDisposable
+    public class LabeledBatchSample_Input : BatchSample_Input
     {
-        public int batchsize = ParameterSetting.BATCH_SIZE;
-        CudaPieceInt word_Idx;
-        CudaPieceInt sample_Idx;
-        CudaPieceInt fea_Idx;
-        CudaPieceInt emo_Idx;
-        CudaPieceInt seg_Margin;
-
-        public int[] Fea_Mem { get { return fea_Idx.MemPtr; } }
+        protected CudaPieceInt emo_Idx;
+        
         public int[] Emo_Mem { get { return emo_Idx.MemPtr; } }
-        public int[] Sample_Mem { get { return sample_Idx.MemPtr; } }
-        public int[] Word_Idx_Mem { get { return word_Idx.MemPtr; } }
-        public int[] Seg_Margin_Mem { get { return seg_Margin.MemPtr; } }
-
-        public IntPtr Fea_Idx { get { return fea_Idx.CudaPtr; } }
+        
         public IntPtr Emo_Idx { get { return emo_Idx.CudaPtr; } }
-        public IntPtr Sample_Idx { get { return sample_Idx.CudaPtr; } }
-        public IntPtr Word_Idx { get { return word_Idx.CudaPtr; } }
-        public IntPtr Seg_Margin { get { return seg_Margin.CudaPtr; } }
+        
 
-        public LabeledBatchSample_Input(int MAX_BATCH_SIZE, int MAXELEMENTS_PERBATCH)
+        public LabeledBatchSample_Input(int MAX_BATCH_SIZE, int MAXELEMENTS_PERBATCH) : base(MAX_BATCH_SIZE, MAXELEMENTS_PERBATCH)
         {
-            sample_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
-            fea_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
             emo_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
-            word_Idx = new CudaPieceInt(MAXELEMENTS_PERBATCH, true, true);
-            seg_Margin = new CudaPieceInt(MAXELEMENTS_PERBATCH, true, true);
         }
 
         ~LabeledBatchSample_Input()
@@ -129,9 +129,9 @@ namespace DSMlib
             Dispose();
         }
 
-        public void Load(BinaryReader mreader, int batchsize)
+        public override void Load(BinaryReader mreader, int batchsize)
         {
-            int elementSize = mreader.ReadInt32();
+            this.elementSize = mreader.ReadInt32();
             this.batchsize = mreader.ReadInt32();
             if (batchsize != this.batchsize)
             {
@@ -171,7 +171,7 @@ namespace DSMlib
             }
         }
 
-        public void Batch_In_GPU()
+        public override void Batch_In_GPU()
         {
             sample_Idx.CopyIntoCuda();
             fea_Idx.CopyIntoCuda();
@@ -182,11 +182,31 @@ namespace DSMlib
 
         public void Dispose()
         {
-            sample_Idx.Dispose();
-            fea_Idx.Dispose();
-            emo_Idx.Dispose();
-            word_Idx.Dispose();
-            seg_Margin.Dispose();
+            if (sample_Idx != null)
+            {
+                sample_Idx.Dispose();
+                sample_Idx = null;
+            }
+            if (fea_Idx != null)
+            {
+                fea_Idx.Dispose();
+                fea_Idx = null;
+            }
+            if (word_Idx != null)
+            {
+                word_Idx.Dispose();
+                word_Idx = null;
+            }
+            if (seg_Margin != null)
+            {
+                seg_Margin.Dispose();
+                seg_Margin = null;
+            }
+            if (emo_Idx != null)
+            {
+                emo_Idx.Dispose();
+                emo_Idx = null;
+            }
         }
     }
 }
