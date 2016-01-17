@@ -527,11 +527,15 @@ namespace DSMlib
                         //Program.Print("Start validation process ...");
                         VALIDATION_Eval = Evaluate();
                         
-                        Program.Print("Dataset VALIDATION :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
+                        Program.Print("Dataset VALIDATION for model "+ iter.ToString() +" :\n/*******************************/ \n" + VALIDATION_Eval.ToString() + " \n/*******************************/ \n");
                         if (File.Exists(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()))
                         {
                             LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()));
                         }
+                    }
+                    if (ParameterSetting.VALIDATE_MODEL_ONLY)
+                    {
+                        return;
                     }
                 }
                 else
@@ -545,12 +549,7 @@ namespace DSMlib
                     {
                         LearningParameters.lr_mid = float.Parse(File.ReadAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString()));
                     }
-                }
-
-                if (ParameterSetting.ISVALIDATE && ParameterSetting.VALIDATE_MODEL_ONLY)
-                {
-                    return;
-                }
+                }               
             }
 
             //// Clone to backup models
@@ -559,10 +558,7 @@ namespace DSMlib
                 dnn_backup = dnn.CreateBackupClone();
             }
 
-            if (ParameterSetting.NOTrain)
-            {
-                return;
-            }
+            
             Program.Print("total triplet instance number : " + TriStream.q0stream.nLine.ToString());
             //Program.Print("total doc sample number : " + TriStream.dstream.total_Batch_Size.ToString());
             Program.Print("Training batches: " + TriStream.q0stream.BATCH_NUM.ToString());
@@ -605,15 +601,18 @@ namespace DSMlib
                 {
                     trainingLoss += feedstream_batch(new BatchSample_Input[] {TriStream.GPU_q0batch, TriStream.GPU_q1batch, TriStream.GPU_q2batch}, true);
                     mmindex += 1;
-                    if (mmindex % 2 == 0)
+                    if (mmindex % 50 == 0)
                     {
-                        Console.WriteLine("Training :{0}", mmindex.ToString());
+                        Console.WriteLine("Training done:{0}", mmindex.ToString());
                     }
                 }
 
                 Program.Print("Training Loss : " + trainingLoss.ToString());
                 Program.Print("Learning Rate : " + (LearningParameters.learning_rate.ToString()));
+
                 
+                
+                dnn.CopyOutFromCuda();
                 
 
                 if (ParameterSetting.ISVALIDATE)
@@ -648,14 +647,9 @@ namespace DSMlib
                         }
                     }
                 }
-
-                
-
                 string dssmModelPath = ComposeDSSMModelPaths(iter);
                 Program.Print("Saving models ...");
-                dnn.CopyOutFromCuda();
                 dnn.Model_Save(dssmModelPath);
-
                 //// write the learning rate after this iter
                 File.WriteAllText(ParameterSetting.MODEL_PATH + "_LEARNING_RATE_ITER=" + iter.ToString(), LearningParameters.lr_mid.ToString());
 

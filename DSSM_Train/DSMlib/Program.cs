@@ -102,25 +102,16 @@ namespace DSMlib
                         dnnTrain.LoadTrainData(trainfiles);
                         if (ParameterSetting.ISVALIDATE)
                         {
-                            if (!ParameterSetting.VALIDATE_MODEL_ONLY)
-                            {
-                                // under construction
-                                //dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE, ParameterSetting.VALIDATE_QDPAIR });
-                            }
-                            else
-                            {
-                                Program.Print("Validation process without stream; model only");
-                            }
+                            dnnTrain.LoadValidateData(new string[1] { ParameterSetting.VALIDATE_FILE });
                         }
                         break;
-                    case ObjectiveType.SOFTMAX : 
-                        // under construction
-                        //dnnTrain = new MultiRegression_DNN_Train();
-                        //dnnTrain.LoadTrainData(new string[]{ParameterSetting.QFILE, ParameterSetting.DFILE});
-                        //if (ParameterSetting.ISVALIDATE)
-                        //{
-                        //    dnnTrain.LoadValidateData(new string[] { ParameterSetting.VALIDATE_QFILE, ParameterSetting.VALIDATE_DFILE });
-                        //}
+                    case ObjectiveType.SOFTMAX:
+                        dnnTrain = new Label_DNNTrain();
+                        string trainfile = ParameterSetting.QFILE_0;
+                        string validfile = ParameterSetting.QFILE_1;
+                        string testfile = ParameterSetting.QFILE_2;
+                        dnnTrain.LoadTrainData(new string[1] { trainfile });
+                        dnnTrain.LoadValidateData(new string[2] { validfile, testfile });
                         break;                    
                 }
 

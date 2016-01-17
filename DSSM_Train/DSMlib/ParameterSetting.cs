@@ -20,7 +20,10 @@ namespace DSMlib
 
     public class ParameterSetting
     {
-
+        // added SUPMODEL_INIT, LAST_NORMALIZATION; in supervised training, model arch is the same; q0, q01, q2 are used as train, 
+        // validation, test files; for weak train, VALIDATE_FILE is used as validation file
+        // in weak train, ISVALIDATE is used to indicate whether to validate; but in supervised train, it is not used. validate is mandantory,
+        // in both cases, VALIDATE_MODEL_ONLY is used to validate (and test) previous models and return with no train
         // 下面这段是我加的
         public static int FIXED_FEATURE_DIM = 300;  // 输入词向量的长度
 
@@ -135,7 +138,11 @@ namespace DSMlib
         /// </summary>
         public static bool UpdateBias = false;
 
-        public static string WORDLT_INIT = null;
+        public static string WORDLT_INIT = string.Empty;
+
+        // used by supervised learning as to whether init the model by pre-trained model or not, if not, just set it arbitrarily
+        public static string SUPMODEL_INIT = string.Empty;
+        public static float LAST_NORMALIZATION = 0;  // 0 means no normalization, set >0 to give a normalization to the output weights
 
         public static void LoadArgs(string conf_filename)
         {
@@ -265,6 +272,14 @@ namespace DSMlib
                 else if (cmds[0].Equals("WORDLT_INIT"))
                 {
                     WORDLT_INIT = cmds[1];
+                }
+                else if (cmds[0].Equals("LAST_NORMALIZATION"))
+                {
+                    LAST_NORMALIZATION = float.Parse(cmds[1]);
+                }
+                else if (cmds[0].Equals("SUPMODEL_INIT"))
+                {
+                    SUPMODEL_INIT = cmds[1];
                 }
                 else if (cmds[0].Equals("Q0FILE"))
                 {
