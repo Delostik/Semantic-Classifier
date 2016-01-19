@@ -436,6 +436,11 @@ namespace DSMlib
                     VALIDATE_PROCESS = cmds[1];
                     ISVALIDATE = true;
                 }
+                else if (cmds[0].Equals("VALIDATE"))
+                {
+                    ISVALIDATE = int.Parse(cmds[1]) == 1;
+                    
+                }
                 else if (cmds[0].Equals("VALIDATE_MODEL_ONLY"))
                 {
                     if (int.Parse(cmds[1]) == 1)

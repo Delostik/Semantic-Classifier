@@ -11,16 +11,30 @@
 #include <cuda_runtime_api.h>
 #include <cuda_surface_types.h>
 #include "device_launch_parameters.h" //device_launch_parameters.h"
-#include <comutil.h>
+//#include <comutil.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include <stdlib.h>
 
-#pragma comment(lib, "cudart") 
+//#pragma comment(lib, "cudart") 
+
+#if defined(_WIN32)
+#include <comutil.h>
+using namespace _com_util;
+#pragma comment(lib, "cudart")
+#else
+typedef wchar_t* BSTR;
+wchar_t* SysAllocString(const wchar_t* src) {
+	int len = wcslen(src);
+	wchar_t* dst = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+	wcscpy(dst, src);
+	return dst;
+}
+#endif
 
 using namespace std; 
-using namespace _com_util;
+//using namespace _com_util;
 /**************Cuda Basic Information************************/
 
 DLLEXP uint32_t __stdcall CudaDeviceCount()
@@ -40,31 +54,57 @@ DLLEXP BSTR __stdcall CudaDeviceProperties(uint32_t i)
 {
 	cudaDeviceProp devProp;
 	cudaGetDeviceProperties(&devProp, i);
-	wchar_t msg[4096] ; //= {L"fasdfsd"};
-	swprintf(msg, L"Major revision number : %d \n", devProp.major);
-	swprintf(&msg[wcslen(msg)], L"Minor revision number : %d \n",devProp.minor);
+	static const int bufferSize = 4096;
+	wchar_t msg[bufferSize]; //= {L"fasdfsd"};
+	swprintf(msg, bufferSize, L"Major revision number : %d \n", devProp.major);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Minor revision number : %d \n", devProp.minor);
 
 	//wstring msg = L"fssagsdf";
-	
-	swprintf(&msg[wcslen(msg)], L"Name : %s \n",devProp.name);
-	swprintf(&msg[wcslen(msg)], L"Total global memory : %u \n",devProp.totalGlobalMem);
-	swprintf(&msg[wcslen(msg)], L"Total shared memory per block : %d \n",devProp.sharedMemPerBlock);
-	swprintf(&msg[wcslen(msg)], L"Total registers per block : %d \n",devProp.regsPerBlock);
-	swprintf(&msg[wcslen(msg)], L"Warp size : %d \n",devProp.warpSize);
-	swprintf(&msg[wcslen(msg)], L"Maximum memory pitch : %d \n",devProp.memPitch);
 
-	swprintf(&msg[wcslen(msg)], L"Maximum threads per block : %u \n",devProp.maxThreadsPerBlock);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Name : %s \n", devProp.name);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Total global memory : %u \n", devProp.totalGlobalMem);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Total shared memory per block : %d \n", devProp.sharedMemPerBlock);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Total registers per block : %d \n", devProp.regsPerBlock);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Warp size : %d \n", devProp.warpSize);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Maximum memory pitch : %d \n", devProp.memPitch);
+
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Maximum threads per block : %u \n", devProp.maxThreadsPerBlock);
 
 	for (uint32_t t = 0; t < 3; ++t)
-		swprintf(&msg[wcslen(msg)], L"Maximum dimension %d of block:  %d\n", t, devProp.maxThreadsDim[t]);
-    for (uint32_t t = 0; t < 3; ++t)
-		swprintf(&msg[wcslen(msg)], L"Maximum dimension %d of grid:   %d\n", t, devProp.maxGridSize[t]);
-    swprintf(&msg[wcslen(msg)], L"Clock rate:                    %d\n",  devProp.clockRate);
-    swprintf(&msg[wcslen(msg)], L"Total constant memory:         %u\n",  devProp.totalConstMem);
-    swprintf(&msg[wcslen(msg)], L"Texture alignment:             %u\n",  devProp.textureAlignment);
-    swprintf(&msg[wcslen(msg)], L"Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? L"Yes" : L"No"));
-    swprintf(&msg[wcslen(msg)], L"Number of multiprocessors:     %d\n",  devProp.multiProcessorCount);
-    swprintf(&msg[wcslen(msg)], L"Kernel execution timeout:      %s\n",  (devProp.kernelExecTimeoutEnabled ? L"Yes" : L"No"));
+		swprintf(&msg[wcslen(msg)], bufferSize, L"Maximum dimension %d of block:  %d\n", t, devProp.maxThreadsDim[t]);
+	for (uint32_t t = 0; t < 3; ++t)
+		swprintf(&msg[wcslen(msg)], bufferSize, L"Maximum dimension %d of grid:   %d\n", t, devProp.maxGridSize[t]);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Clock rate:                    %d\n", devProp.clockRate);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Total constant memory:         %u\n", devProp.totalConstMem);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Texture alignment:             %u\n", devProp.textureAlignment);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Concurrent copy and execution: %s\n", (devProp.deviceOverlap ? L"Yes" : L"No"));
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Number of multiprocessors:     %d\n", devProp.multiProcessorCount);
+	swprintf(&msg[wcslen(msg)], bufferSize, L"Kernel execution timeout:      %s\n", (devProp.kernelExecTimeoutEnabled ? L"Yes" : L"No"));
+	//wchar_t msg[4096] ; //= {L"fasdfsd"};
+	//swprintf(msg, L"Major revision number : %d \n", devProp.major);
+	//swprintf(&msg[wcslen(msg)], L"Minor revision number : %d \n",devProp.minor);
+
+	////wstring msg = L"fssagsdf";
+	//
+	//swprintf(&msg[wcslen(msg)], L"Name : %s \n",devProp.name);
+	//swprintf(&msg[wcslen(msg)], L"Total global memory : %u \n",devProp.totalGlobalMem);
+	//swprintf(&msg[wcslen(msg)], L"Total shared memory per block : %d \n",devProp.sharedMemPerBlock);
+	//swprintf(&msg[wcslen(msg)], L"Total registers per block : %d \n",devProp.regsPerBlock);
+	//swprintf(&msg[wcslen(msg)], L"Warp size : %d \n",devProp.warpSize);
+	//swprintf(&msg[wcslen(msg)], L"Maximum memory pitch : %d \n",devProp.memPitch);
+
+	//swprintf(&msg[wcslen(msg)], L"Maximum threads per block : %u \n",devProp.maxThreadsPerBlock);
+
+	//for (uint32_t t = 0; t < 3; ++t)
+	//	swprintf(&msg[wcslen(msg)], L"Maximum dimension %d of block:  %d\n", t, devProp.maxThreadsDim[t]);
+ //   for (uint32_t t = 0; t < 3; ++t)
+	//	swprintf(&msg[wcslen(msg)], L"Maximum dimension %d of grid:   %d\n", t, devProp.maxGridSize[t]);
+ //   swprintf(&msg[wcslen(msg)], L"Clock rate:                    %d\n",  devProp.clockRate);
+ //   swprintf(&msg[wcslen(msg)], L"Total constant memory:         %u\n",  devProp.totalConstMem);
+ //   swprintf(&msg[wcslen(msg)], L"Texture alignment:             %u\n",  devProp.textureAlignment);
+ //   swprintf(&msg[wcslen(msg)], L"Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? L"Yes" : L"No"));
+ //   swprintf(&msg[wcslen(msg)], L"Number of multiprocessors:     %d\n",  devProp.multiProcessorCount);
+ //   swprintf(&msg[wcslen(msg)], L"Kernel execution timeout:      %s\n",  (devProp.kernelExecTimeoutEnabled ? L"Yes" : L"No"));
 	
 	return ::SysAllocString(msg);
 

@@ -4,12 +4,18 @@
 //
 
 #pragma once
-
-#include "targetver.h"
+//#define __WIN32__
+//#include "targetver.h"
 
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
 // Windows Header Files:
+//#include <windows.h>
+
+#if defined(_WIN32)
+#include "targetver.h"
 #include <windows.h>
+#include <comutil.h>
+#endif
 
 #include <iostream> 
 #include <vector> 
@@ -19,21 +25,30 @@
 #include <cuda_runtime_api.h>
 #include <cuda_surface_types.h>
 #include "device_launch_parameters.h" //device_launch_parameters.h"
-#include <comutil.h>
+//#include <comutil.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include <stdlib.h>
 
 #include "cublas_v2.h"
+//#pragma comment(lib, "cudart") 
+//#pragma comment(lib,"cublas.lib")
+
+#if defined(_WIN32)
 #pragma comment(lib, "cudart") 
-#pragma comment(lib,"cublas.lib")
+#pragma comment(lib, "cublas.lib")
+#define DLLEXP extern "C" __declspec(dllexport)
+#else
+#define DLLEXP extern "C"
+#define __stdcall
+#endif
 
 //typedef amp_tausworthe_hybrid_collection<2> amp_rng;
 // TODO: reference additional headers your program requires here
 #define DROPOUT_CONST (3e38f)
 
-#define DLLEXP extern "C" __declspec(dllexport)
+//#define DLLEXP extern "C" __declspec(dllexport)
 // TODO: reference additional headers your program requires here
 #define DEFAULT_THREAD_PER_BLOCK    128     // default number of threads per block 
 #define DEFAULT_THREAD_PER_DIM		16
