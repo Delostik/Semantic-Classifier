@@ -131,6 +131,8 @@ namespace DSMlib
 
         public int nLine = 0;
         public int MAXSEGMENT_BATCH = 0;
+        public bool isTrain;
+        public int MAX_BATCH_SIZE;
         public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
         public int BATCH_INDEX = 0;
@@ -187,20 +189,22 @@ namespace DSMlib
 
         public int get_dimension2(string fileName)
         {
+            isTrain = false;
+            
             mstream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
             mreader = new BinaryReader(mstream);
             mstream.Seek(-3 * sizeof(Int32), SeekOrigin.End);
 
             nLine = mreader.ReadInt32();
             int batch_size = mreader.ReadInt32();
-
+            MAX_BATCH_SIZE = batch_size;
             
             MAXSEGMENT_BATCH = mreader.ReadInt32();
 
-            Data = new LabeledBatchSample_Input(batch_size, MAXSEGMENT_BATCH);
+            Data = new LabeledBatchSample_Input(MAX_BATCH_SIZE, MAXSEGMENT_BATCH);
 
-            BATCH_NUM = (nLine + ParameterSetting.BATCH_SIZE - 1) / ParameterSetting.BATCH_SIZE;
-            LAST_INCOMPLETE_BATCH_SIZE = nLine % ParameterSetting.BATCH_SIZE;
+            BATCH_NUM = (nLine + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE;
+            LAST_INCOMPLETE_BATCH_SIZE = nLine % MAX_BATCH_SIZE;
             BATCH_INDEX = 0;
             return batch_size;
         }
@@ -213,7 +217,11 @@ namespace DSMlib
 
         void LoadDataBatch()
         {
-            int expectedBatchSize = ParameterSetting.BATCH_SIZE;
+            int expectedBatchSize;
+            if (isTrain)
+                expectedBatchSize = ParameterSetting.BATCH_SIZE;
+            else
+                expectedBatchSize = MAX_BATCH_SIZE;
             if (BATCH_INDEX == BATCH_NUM - 1 && LAST_INCOMPLETE_BATCH_SIZE != 0)
             {
                 // only when the lastbatch is less than  BATCH_SIZE, we will need some care
