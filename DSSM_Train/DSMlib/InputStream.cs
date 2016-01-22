@@ -131,7 +131,7 @@ namespace DSMlib
 
         public int nLine = 0;
         public int MAXSEGMENT_BATCH = 0;
-        public bool isTrain;
+        public bool isTrain = true;
         public int MAX_BATCH_SIZE;
         public int Feature_Size = ParameterSetting.FIXED_FEATURE_DIM;
         public int BATCH_NUM = 0;
