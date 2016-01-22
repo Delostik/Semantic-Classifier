@@ -309,9 +309,20 @@ namespace DSMlib
             return 0;
         }
 
+        float calAccuracy(int tp, int tn, int fp, int fn)
+        {
+            return ((float)(tp + tn)) / ((float)(tp + tn + fn + fp));
+        }
+        float calF1(int tp, int tn, int fp, int fn)
+        {
+            float mf1pos = ((float)(2 * tp)) / ((float)(2 * tp + fp + fn));
+            float mf1neg = ((float)(2 * tn)) / ((float)(2 * tn + fp + fn));
+            return (mf1pos + mf1neg) / 2;
+        }
+
         float[] evalModel()
         {
-            float[] res = new float[4]; // 0-validation accuracy; 1-validation macro-f1; 2-test accuracy; 3-test macro-f1
+            float[] res = new float[12]; // 0-validation accuracy; 1-validation macro-f1; 2-test accuracy; 3-test macro-f1
             Program.timer.Reset();
             Program.timer.Start();
             Program.Print("Strat evaluating ...");
@@ -322,34 +333,62 @@ namespace DSMlib
             float[] predictions = dnn_forward_valid.neurallayers.Last().Output.MemPtr;
             // calculate tp, tf, fp, fn
             int tp = 0, tn = 0, fp = 0, fn = 0;
+            int subj_tp = 0, subj_tn = 0, subj_fp = 0, subj_fn = 0;
+            int obj_tp = 0, obj_tn = 0, obj_fp = 0, obj_fn = 0;
             for (int i = 0; i < validStream.GPU_lbatch.batchsize; i++)
             {
                 int l = validStream.GPU_lbatch.Emo_Mem[i];
                 if (l == 1)
                 {
                     if (predictions[2 * i + 1] >= predictions[2 * i])
+                    {
                         tp++; // true nagtive for negtive senti
+                        if (validStream.GPU_lbatch.Subj_Mem[i] == 1)
+                            subj_tp++;
+                        else
+                            obj_tp++;
+                    }
                     else
+                    {
                         fn++; // false positive for negative senti
+                        if (validStream.GPU_lbatch.Subj_Mem[i] == 1)
+                            subj_fn++;
+                        else
+                            obj_fn++;
+                    }
                 }
                 else
                 {
                     if (predictions[2 * i + 1] >= predictions[2 * i])
+                    {
                         fp++; // false negative for negative senti
+                        if (validStream.GPU_lbatch.Subj_Mem[i] == 1)
+                            subj_fp++;
+                        else
+                            obj_fp++;
+                    }
                     else
+                    {
                         tn++; // true positive for negative senti
+                        if (validStream.GPU_lbatch.Subj_Mem[i] == 1)
+                            subj_tn++;
+                        else
+                            obj_tn++;
+                    }
                 }
             }
-            res[0] = ((float)(tp+tn)) / ((float)(tp+tn+fn+fp));
-            float mf1pos = ((float)(2 * tp)) / ((float)(2 * tp + fp + fn));
-            float mf1neg = ((float)(2 * tn)) / ((float)(2 * tn + fp + fn));
-            res[1] = (mf1pos + mf1neg) / 2;
+            res[0] = calAccuracy(tp, tn, fp, fn);
+            res[1] = calF1(tp, tn, fp, fn);
+
+            res[4] = calAccuracy(subj_tp, subj_tn, subj_fp, subj_fn);
+            res[5] = calF1(subj_tp, subj_tn, subj_fp, subj_fn);
+            res[8] = calAccuracy(obj_tp, obj_tn, obj_fp, obj_fn);
+            res[9] = calF1(obj_tp, obj_tn, obj_fp, obj_fn);
 
             testStream.Init_Batch();
-            tp = 0;
-            tn = 0;
-            fp = 0;
-            fn = 0;
+            tp = 0; tn = 0; fp = 0; fn = 0;
+            subj_tp = 0; subj_tn = 0; subj_fp = 0; subj_fn = 0;
+            obj_tp = 0; obj_tn = 0; obj_fp = 0; obj_fn = 0;
             while (testStream.Next_Batch())
             {
                 dnn_forward_test.forward_activate(testStream.GPU_lbatch);
@@ -361,24 +400,51 @@ namespace DSMlib
                     if (l == 1)
                     {
                         if (pred[2 * i + 1] >= pred[2 * i])
-                            tp++; 
+                        {
+                            tp++;
+                            if (testStream.GPU_lbatch.Subj_Mem[i] == 1)
+                                subj_tp++;
+                            else
+                                obj_tp++;
+                        }
                         else
-                            fn++; 
+                        {
+                            fn++;
+                            if (testStream.GPU_lbatch.Subj_Mem[i] == 1)
+                                subj_fn++;
+                            else
+                                obj_fn++;
+                        }
                     }
                     else
                     {
                         if (pred[2 * i + 1] >= pred[2 * i])
-                            fp++; 
+                        {
+                            fp++;
+                            if (testStream.GPU_lbatch.Subj_Mem[i] == 1)
+                                subj_fp++;
+                            else
+                                obj_fp++;
+                        }
                         else
-                            tn++; 
+                        {
+                            tn++;
+                            if (testStream.GPU_lbatch.Subj_Mem[i] == 1)
+                                subj_tn++;
+                            else
+                                obj_tn++;
+                        }
                     }
                 }
             }
 
-            res[2] = ((float)(tp + tn)) / ((float)(tp + tn + fn + fp));
-            mf1pos = ((float)(2 * tp)) / ((float)(2 * tp + fp + fn));
-            mf1neg = ((float)(2 * tn)) / ((float)(2 * tn + fp + fn));
-            res[3] = (mf1pos + mf1neg) / 2;
+            res[2] = calAccuracy(tp, tn, fp, fn);
+            res[3] = calF1(tp, tn, fp, fn);
+
+            res[6] = calAccuracy(subj_tp, subj_tn, subj_fp, subj_fn);
+            res[7] = calF1(subj_tp, subj_tn, subj_fp, subj_fn);
+            res[10] = calAccuracy(obj_tp, obj_tn, obj_fp, obj_fn);
+            res[11] = calF1(obj_tp, obj_tn, obj_fp, obj_fn);
 
             Program.timer.Stop();
             Program.Print("Validation done : " + Program.timer.Elapsed.ToString());
@@ -567,6 +633,14 @@ namespace DSMlib
                                     + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                     + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
                                     + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                    + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
+                                    + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
+                                    + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
+                                    + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                    + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
+                                    + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
+                                    + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
+                                    + "Test F1(obj): " + VALIDATION_Eval[11].ToString()
                                     + " \n/*******************************/ \n");
                     
                 File.WriteAllText(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + 0.ToString(), LearningParameters.lr_mid.ToString());
@@ -589,6 +663,14 @@ namespace DSMlib
                                             + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                             + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
                                             + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                            + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
+                                            + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
+                                            + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
+                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                            + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
+                                            + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
+                                            + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
+                                            + "Test F1(obj): " + VALIDATION_Eval[11].ToString()
                                             + " \n/*******************************/ \n"); 
                         if (File.Exists(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + iter.ToString()))
                         {
@@ -680,6 +762,14 @@ namespace DSMlib
                                             + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                             + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
                                             + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                            + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
+                                            + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
+                                            + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
+                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                            + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
+                                            + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
+                                            + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
+                                            + "Test F1(obj): " + VALIDATION_Eval[11].ToString()
                                             + " \n/*******************************/ \n"); 
 
 

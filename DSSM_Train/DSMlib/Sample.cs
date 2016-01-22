@@ -113,15 +113,21 @@ namespace DSMlib
     public class LabeledBatchSample_Input : BatchSample_Input
     {
         protected CudaPieceInt emo_Idx;
+        protected CudaPieceInt subj_Idx;
         
         public int[] Emo_Mem { get { return emo_Idx.MemPtr; } }
         
         public IntPtr Emo_Idx { get { return emo_Idx.CudaPtr; } }
+
+        public int[] Subj_Mem { get { return subj_Idx.MemPtr; } }
+
+        public IntPtr Subj_Idx { get { return subj_Idx.CudaPtr; } }
         
 
         public LabeledBatchSample_Input(int MAX_BATCH_SIZE, int MAXELEMENTS_PERBATCH) : base(MAX_BATCH_SIZE, MAXELEMENTS_PERBATCH)
         {
             emo_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, true);
+            subj_Idx = new CudaPieceInt(MAX_BATCH_SIZE, true, false);
         }
 
         ~LabeledBatchSample_Input()
@@ -152,10 +158,15 @@ namespace DSMlib
             {
                 Emo_Mem[i] = mreader.ReadInt32();
             }
+            for (int i = 0; i < batchsize; i++)
+            {
+                Subj_Mem[i] = mreader.ReadInt32();
+            }
             // update cudaDataPiece sizes
             sample_Idx.Size = batchsize;
             fea_Idx.Size = batchsize;
             emo_Idx.Size = batchsize;
+            subj_Idx.Size = batchsize;
             word_Idx.Size = elementSize;
             seg_Margin.Size = elementSize;
 
@@ -206,6 +217,11 @@ namespace DSMlib
             {
                 emo_Idx.Dispose();
                 emo_Idx = null;
+            }
+            if (subj_Idx != null)
+            {
+                subj_Idx.Dispose();
+                subj_Idx = null;
             }
         }
     }
