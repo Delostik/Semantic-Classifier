@@ -632,11 +632,11 @@ namespace DSMlib
                                     + "Validation accuracy: " + VALIDATION_Eval[0].ToString() + "\n"
                                     + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                     + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
-                                    + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                    + "Test F1: " + VALIDATION_Eval[3].ToString() + "\n"
                                     + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
                                     + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
                                     + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
-                                    + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                    + "Test F1(subj): " + VALIDATION_Eval[7].ToString() + "\n"
                                     + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
                                     + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
                                     + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
@@ -662,11 +662,11 @@ namespace DSMlib
                                             + "Validation accuracy: " + VALIDATION_Eval[0].ToString() + "\n"
                                             + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                             + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
-                                            + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                            + "Test F1: " + VALIDATION_Eval[3].ToString() + "\n"
                                             + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
                                             + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
                                             + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
-                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString() + "\n"
                                             + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
                                             + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
                                             + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
@@ -761,11 +761,11 @@ namespace DSMlib
                                             + "Validation accuracy: " + VALIDATION_Eval[0].ToString() + "\n"
                                             + "Validation F1: " + VALIDATION_Eval[1].ToString() + "\n"
                                             + "Test accuracy: " + VALIDATION_Eval[2].ToString() + "\n"
-                                            + "Test F1: " + VALIDATION_Eval[3].ToString()
+                                            + "Test F1: " + VALIDATION_Eval[3].ToString() + "\n"
                                             + "Validation accuracy(subj): " + VALIDATION_Eval[4].ToString() + "\n"
                                             + "Validation F1(subj): " + VALIDATION_Eval[5].ToString() + "\n"
                                             + "Test accuracy(subj): " + VALIDATION_Eval[6].ToString() + "\n"
-                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString()
+                                            + "Test F1(subj): " + VALIDATION_Eval[7].ToString() + "\n"
                                             + "Validation accuracy(obj): " + VALIDATION_Eval[8].ToString() + "\n"
                                             + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
                                             + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"

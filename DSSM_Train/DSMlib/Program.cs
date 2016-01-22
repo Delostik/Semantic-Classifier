@@ -79,9 +79,20 @@ namespace DSMlib
                 }
                 //Load_Train_PairData(ParameterSetting.QFILE, ParameterSetting.DFILE);
 
-                if (ParameterSetting.CheckGrad)
+                if (ParameterSetting.CheckGrad && ParameterSetting.OBJECTIVE == ObjectiveType.WEAKRANK)
                 {
                     CheckGradient cg = new CheckGradient();
+                    cg.initDNN();
+                    cg.initRun();
+                    cg.CheckGrad();
+                    if (ParameterSetting.CuBlasEnable)
+                        Cudalib.CUBLAS_Destroy();
+                    return;
+                }
+
+                if (ParameterSetting.CheckGrad && ParameterSetting.OBJECTIVE == ObjectiveType.SOFTMAX)
+                {
+                    CheckGradientSup cg = new CheckGradientSup();
                     cg.initDNN();
                     cg.initRun();
                     cg.CheckGrad();
