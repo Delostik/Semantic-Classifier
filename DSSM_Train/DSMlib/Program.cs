@@ -35,6 +35,9 @@ namespace DSMlib
 
         static FileStream log_stream = null;//new FileStream(ParameterSetting.Log_FileName + "SEED" + ParameterSetting.RANDOMSEED.ToString(), FileMode.Create, FileAccess.Write);
         static StreamWriter log_writer = null; // new StreamWriter(log_stream);
+
+        public static readonly string[] evalCases = new string[] {"10", "20", "30", "40", "50", "60", "70", "80", "90"};
+        public static readonly int smpSize = 30;
         
         public static void Print(string mstr)
         {
@@ -47,6 +50,13 @@ namespace DSMlib
         }
 
         public static Stopwatch timer = new Stopwatch();
+
+        public static void writeRes(StreamWriter writer, string percent, int smp, float[] res)
+        {
+            writer.Write("{0} {1} {2:.000000} {3:.000000} {4:.000000} {5:.000000} {6:.000000} {7:.000000}"
+                , percent, smp, res[2], res[3], res[6], res[7], res[10], res[11]);
+            writer.Write("\n");
+        }
 
         static void Main(string[] args)
         {
@@ -78,6 +88,51 @@ namespace DSMlib
                     Cudalib.CUBLAS_Init();
                 }
                 //Load_Train_PairData(ParameterSetting.QFILE, ParameterSetting.DFILE);
+                if (ParameterSetting.BatchEvalDir != null)
+                {
+                    if (!Directory.Exists(ParameterSetting.BatchEvalDir))
+                        throw new Exception("Batch evaluation directory not found!");
+
+                    FileStream evalfile = new FileStream("batchRes.txt", FileMode.Create, FileAccess.Write);
+                    StreamWriter evalWriter = new StreamWriter(evalfile);
+
+                    FileStream evalfilef = new FileStream("batchRes_Fin.txt", FileMode.Create, FileAccess.Write);
+                    StreamWriter evalWriterf = new StreamWriter(evalfile);
+
+                    for (int i = 0; i < evalCases.Length; i++)
+                    {
+                        string prefix = ParameterSetting.BatchEvalDir + "/" + evalCases[i] + "/";
+                        for (int j = 0; j < smpSize; j++)
+                        {
+                            string curr_train = prefix + j.ToString() + "_sf/" + j.ToString() + ".bin";
+                            Program.Print("Processing file: " + curr_train);
+                            Label_DNNTrain dnntrain = new Label_DNNTrain();
+                            string validfile = ParameterSetting.QFILE_1;
+                            string testfile = ParameterSetting.QFILE_2;
+                            dnntrain.LoadTrainData(new string[1] { curr_train });
+                            dnntrain.LoadValidateData(new string[2] { validfile, testfile });
+                            dnntrain.ModelInit_FromConfig();
+                            dnntrain.Training();
+
+                            writeRes(evalWriter, evalCases[i], j, dnntrain.evalRes);
+                            writeRes(evalWriterf, evalCases[i], j, dnntrain.finalRes);
+
+                            dnntrain.Dispose();
+                        }
+                    }
+
+                    evalWriter.Close();
+                    evalWriterf.Close();
+                    evalfile.Close();
+                    evalfilef.Close();
+
+
+                    if (ParameterSetting.CuBlasEnable)
+                        Cudalib.CUBLAS_Destroy();
+                    log_writer.Close();
+                    log_stream.Close();
+                    return;
+                }
 
                 if (ParameterSetting.CheckGrad && ParameterSetting.OBJECTIVE == ObjectiveType.WEAKRANK)
                 {
@@ -87,6 +142,8 @@ namespace DSMlib
                     cg.CheckGrad();
                     if (ParameterSetting.CuBlasEnable)
                         Cudalib.CUBLAS_Destroy();
+                    log_writer.Close();
+                    log_stream.Close();
                     return;
                 }
 
@@ -98,6 +155,8 @@ namespace DSMlib
                     cg.CheckGrad();
                     if (ParameterSetting.CuBlasEnable)
                         Cudalib.CUBLAS_Destroy();
+                    log_writer.Close();
+                    log_stream.Close();
                     return;
                 }
 

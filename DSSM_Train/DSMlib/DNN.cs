@@ -1577,6 +1577,22 @@ namespace DSMlib
             
         }
 
+        public void Dispose()
+        {
+            if (neurallayers != null)
+            {
+                for (int i = 0; i < neurallayers.Count; i++)
+                    neurallayers[i].Dispose();
+                neurallayers.Clear();
+            }
+            if (neurallinks != null)
+            {
+                for (int i = 0; i < neurallinks.Count; i++)
+                    neurallinks[i].Dispose();
+                neurallinks.Clear();
+            }
+        }
+
         public int OutputLayerSize
         {
             get { return neurallayers.Last().Number; }
@@ -1956,6 +1972,32 @@ namespace DSMlib
                 MathOperatorManager.GlobalInstance.Sparse_Update_Lookup_Ada_Sup(contextLT.Table, contextLT, contextLT.Table.vecDim, learning_rate, ParameterSetting.DSSMEpsilon);
             }
 
+        }
+
+        public void Dispose()
+        {
+            if (neurallayers != null)
+            {
+                for (int i = 0; i < neurallayers.Count; i++)
+                    neurallayers[i].Dispose();
+                neurallayers.Clear();
+            }
+            if (neurallinks != null)
+            {
+                for (int i = 0; i < neurallinks.Count; i++)
+                    neurallinks[i].Dispose();
+                neurallinks.Clear();
+            }
+            if (wordLT != null)
+            {
+                wordLT.Dispose();
+                wordLT = null;
+            }
+            if (contextLT != null)
+            {
+                contextLT.Dispose();
+                contextLT = null;
+            }
         }
 
         unsafe void summarizeUnique(BatchSample_Input inputBatch)

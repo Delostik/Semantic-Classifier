@@ -461,6 +461,7 @@ namespace DSMlib
             //Program.Print("test3 using gpu memory");
             calObj(objs);
             calculate_outputderiv(fakeData.Emo_Mem, dnn_runData.neurallayers.Last().ErrorDeriv.MemPtr);
+            dnn_runData.neurallayers.Last().ErrorDeriv.CopyIntoCuda();
             dnn_runData.backward_propagate_deriv(fakeData);
 
             // copy derivatives out from gpu

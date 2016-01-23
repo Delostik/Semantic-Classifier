@@ -15,6 +15,11 @@ namespace DSMlib
     class Label_DNNTrain : DNN_Train
     {
         public static int MAX_SEGMENT_BATCH = 0;
+        
+        // for batch train
+        public float[] evalRes = new float[12] { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        public float[] finalRes = null;
+
         DNNRunSup dnn_runData = null;
 
         // for validation
@@ -89,6 +94,21 @@ namespace DSMlib
             trainStream.Dispose();
             validStream.Dispose();
             testStream.Dispose();
+            if (dnn_runData != null)
+            {
+                dnn_runData.Dispose();
+                dnn_runData = null;
+            }
+            if (dnn_forward_valid != null)
+            {
+                dnn_forward_valid.Dispose();
+                dnn_forward_valid = null;
+            }
+            if (dnn_forward_test != null)
+            {
+                dnn_forward_test.Dispose();
+                dnn_forward_test = null;
+            }
         }
 
         
@@ -106,15 +126,27 @@ namespace DSMlib
                     int id = thread_idx * process_len + t;
                     if (id < total)
                     {
-                        double a0 = output[2 * id];
-                        double a1 = output[2 * id + 1] - a0;
+                        double mx = Math.Max(output[2 * id], output[2 * id + 1]);
+                        double a0 = output[2 * id] - mx;
+                        double a1 = output[2 * id + 1] - mx;
                         a1 = Math.Exp(a1);
-                        if (double.IsPositiveInfinity(a1))
-                            a1 = 1.0;
-                        else
-                            a1 = a1 / (1.0 + a1);
-                        outputy[2 * id + 1] = a1;
-                        outputy[2 * id] = 1 - a1;
+                        a0 = Math.Exp(a0);
+                        //if (double.IsPositiveInfinity(a1))
+                        //    a1 = 1.0;
+                        //else
+                        //    a1 = a1 / (1.0 + a1);
+                        outputy[2 * id + 1] = a1 / (a1 + a0);
+                        outputy[2 * id] = 1 - outputy[2 * id + 1];
+
+                        //double a0 = output[2 * id];
+                        //double a1 = output[2 * id + 1] - a0;
+                        //a1 = Math.Exp(a1);
+                        //if (double.IsPositiveInfinity(a1))
+                        //    a1 = 1.0;
+                        //else
+                        //    a1 = a1 / (1.0 + a1);
+                        //outputy[2 * id + 1] = a1;
+                        //outputy[2 * id] = 1 - a1;
                     }
                     else
                     {
@@ -172,8 +204,9 @@ namespace DSMlib
                     }
                     if (double.IsInfinity(mlambda))
                     {
+                        mlambda = 100000;
                         //Console.WriteLine("IsInfinity");
-                        throw new Exception("Error! IsInfinity.");
+                        //throw new Exception("Error! IsInfinity.");
                     }
                     error += mlambda;
                 }
@@ -770,8 +803,10 @@ namespace DSMlib
                                             + "Validation F1(obj): " + VALIDATION_Eval[9].ToString() + "\n"
                                             + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
                                             + "Test F1(obj): " + VALIDATION_Eval[11].ToString()
-                                            + " \n/*******************************/ \n"); 
+                                            + " \n/*******************************/ \n");
 
+                if (VALIDATION_Eval[2] > evalRes[2])
+                    evalRes = VALIDATION_Eval;
 
                 if (ParameterSetting.updateScheme != 2)
                 {
@@ -812,6 +847,7 @@ namespace DSMlib
                 Program.Print("-----------------------------------------------------------");
             }
 
+            finalRes = VALIDATION_Eval;
             //// Final save
             dnn.CopyOutFromCuda();
             dnn.Model_Save(ParameterSetting.MODEL_PATH + "_Sup_Final");

@@ -30,6 +30,7 @@ namespace DSMlib
         public static bool CuBlasEnable = true;
         public static bool CheckGrad = false;
         public static bool CheckData = false;
+        public static string BatchEvalDir = null;
 
         public static ObjectiveType OBJECTIVE = ObjectiveType.WEAKRANK; //0:weak supervison training; 1:classic supervised training
         //public static string NCE_PROB_FILE = "_null_"; //if NCE and probFile="_null_" then use uniform Prob(D), e.g., Prob(D) = 1/|D|
@@ -272,6 +273,10 @@ namespace DSMlib
                 else if (cmds[0].Equals("WORDLT_INIT"))
                 {
                     WORDLT_INIT = cmds[1];
+                }
+                else if (cmds[0].Equals("BATCH_EVAL"))
+                {
+                    BatchEvalDir = cmds[1];
                 }
                 else if (cmds[0].Equals("LAST_NORMALIZATION"))
                 {
