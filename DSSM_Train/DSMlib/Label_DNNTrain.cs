@@ -19,6 +19,7 @@ namespace DSMlib
         // for batch train
         public float[] evalRes = new float[12] { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         public float[] finalRes = null;
+        public bool isSave = true;
 
         DNNRunSup dnn_runData = null;
 
@@ -528,6 +529,7 @@ namespace DSMlib
                 }
                 else
                 {
+                    Program.Print("=========Using existing model " + ParameterSetting.SUPMODEL_INIT + " to init==========");
                     // init from weak train model
                     dnn.Model_Load(ParameterSetting.SUPMODEL_INIT, false);
                     // random init last layer
@@ -655,10 +657,13 @@ namespace DSMlib
             if (lastRunStopIter == -1)
             {
                 Program.Print("Initialization (Iter 0)");
-                Program.Print("Saving models ...");
-                dnn.CopyOutFromCuda();
-                string dssmModelPath = ComposeDSSMModelPaths(0);
-                dnn.Model_Save(dssmModelPath);
+                if (isSave)
+                {
+                    Program.Print("Saving models ...");
+                    dnn.CopyOutFromCuda();
+                    string dssmModelPath = ComposeDSSMModelPaths(0);
+                    dnn.Model_Save(dssmModelPath);
+                }
                 
                 VALIDATION_Eval = evalModel();
                 Program.Print("Dataset VALIDATION :\n/*******************************/ \n" 
@@ -675,8 +680,11 @@ namespace DSMlib
                                     + "Test accuracy(obj): " + VALIDATION_Eval[10].ToString() + "\n"
                                     + "Test F1(obj): " + VALIDATION_Eval[11].ToString()
                                     + " \n/*******************************/ \n");
-                    
-                File.WriteAllText(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + 0.ToString(), LearningParameters.lr_mid.ToString());
+
+                if (isSave)
+                {
+                    File.WriteAllText(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + 0.ToString(), LearningParameters.lr_mid.ToString());
+                }
                 lastRunStopIter = 0;
             }
             else
@@ -833,15 +841,18 @@ namespace DSMlib
                     }
                 }
 
-                string dssmModelPath = ComposeDSSMModelPaths(iter);
-                Program.Print("Saving models ...");
-                
-                dnn.Model_Save(dssmModelPath);
+                if (isSave)
+                {
+                    string dssmModelPath = ComposeDSSMModelPaths(iter);
+                    Program.Print("Saving models ...");
+
+                    dnn.Model_Save(dssmModelPath);
 
 
-                //// write the learning rate after this iter
-                File.WriteAllText(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + iter.ToString(), LearningParameters.lr_mid.ToString());
 
+                    //// write the learning rate after this iter
+                    File.WriteAllText(ParameterSetting.MODEL_PATH + "_Sup_LEARNING_RATE_ITER=" + iter.ToString(), LearningParameters.lr_mid.ToString());
+                }
                 Program.timer.Stop();
                 Program.Print("Training Runing Time (Iter="+ iter.ToString() +") : " + Program.timer.Elapsed.ToString());
                 Program.Print("-----------------------------------------------------------");
@@ -849,8 +860,11 @@ namespace DSMlib
 
             finalRes = VALIDATION_Eval;
             //// Final save
-            dnn.CopyOutFromCuda();
-            dnn.Model_Save(ParameterSetting.MODEL_PATH + "_Sup_Final");
+            if (isSave)
+            {
+                dnn.CopyOutFromCuda();
+                dnn.Model_Save(ParameterSetting.MODEL_PATH + "_Sup_Final");
+            }
                         
             //pstream.General_Train_Test(ParameterSetting.TRAIN_TEST_RATE);
             //dnn_train

@@ -107,6 +107,7 @@ namespace DSMlib
                             string curr_train = prefix + j.ToString() + "_sf/" + j.ToString() + ".bin";
                             Program.Print("Processing file: " + curr_train);
                             Label_DNNTrain dnntrain = new Label_DNNTrain();
+                            dnntrain.isSave = false;
                             string validfile = ParameterSetting.QFILE_1;
                             string testfile = ParameterSetting.QFILE_2;
                             dnntrain.LoadTrainData(new string[1] { curr_train });

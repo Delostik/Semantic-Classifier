@@ -723,7 +723,10 @@ namespace DSMlib
             if (ParameterSetting.WORDLT_INIT == null || !File.Exists(ParameterSetting.WORDLT_INIT))
                 wordLT.Init();
             else
+            {
+                Program.Print("=========Using Google word vector to init==========");
                 wordLT.Init(ParameterSetting.WORDLT_INIT);
+            }
 
             contextLT.Init();
         }
