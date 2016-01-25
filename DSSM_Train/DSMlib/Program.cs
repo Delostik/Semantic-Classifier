@@ -97,7 +97,7 @@ namespace DSMlib
                     StreamWriter evalWriter = new StreamWriter(evalfile);
 
                     FileStream evalfilef = new FileStream("batchRes_Fin.txt", FileMode.Create, FileAccess.Write);
-                    StreamWriter evalWriterf = new StreamWriter(evalfile);
+                    StreamWriter evalWriterf = new StreamWriter(evalfilef);
 
                     for (int i = 0; i < evalCases.Length; i++)
                     {
