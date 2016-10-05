@@ -9,7 +9,7 @@ using System.Diagnostics;
 namespace DSMlib
 {
     public enum A_Func { Linear = 0, Tanh = 1, Rectified = 2 };
-    public enum N_Type { Fully_Connected = 0, Convolution_layer = 1, /*Added by Ziyu Guan*/MultiWidthConv_layer = 2, Composite_Full = 3/*Added by Ziyu Guan*/ };
+    public enum N_Type { Fully_Connected = 0, Convolution_layer = 1, /*Added by Ziyu Guan*/MultiWidthConv_layer = 2, Composite_Full = 3, bLSTM = 4/*Added by Ziyu Guan*/ };
     public enum P_Pooling {MAX_Pooling = 0 };
     /// <summary>
     /// Model related parameters
@@ -34,6 +34,10 @@ namespace DSMlib
         public CudaPieceFloat bias;
 
         //***** Added by Ziyu Guan
+        // for recurrent input from previous step's output; for both weight and recur_weight, we store 8 weight matrices in sequence
+        // for weight: W_a, reverse_W_a, W_i, reverse_W_i, W_f, reverse_W_f, W_o, reverse_W_o, each of size (output_dim/2) * feature_dim; 
+        // for recurrent weight: U_a, reverse_U_a, U_i, reverse_U_i, U_f, reverse_U_f, U_o, reverse_U_o, each of size (output_dim/2) * (output_dim/2)
+        public CudaPieceFloat recur_weight;
         public CudaPieceInt winsizes = null;
         public CudaPieceInt fmsizes = null;
         public int[] wnd_sizes { get { return winsizes.MemPtr; } }
@@ -44,9 +48,11 @@ namespace DSMlib
 
         public IntPtr Weight { get { return weight.CudaPtr; } }
         public IntPtr Bias { get { return bias.CudaPtr; } }
+        public IntPtr Re_weight { get { return recur_weight.CudaPtr; } } 
 
         public float[] Back_Weight { get { return weight.MemPtr; } }
         public float[] Back_Bias { get { return bias.MemPtr; } }
+        public float[] Back_reWeight { get { return recur_weight.MemPtr; } }
 
         public A_Func Af;
         public N_Type Nt = N_Type.Fully_Connected;
@@ -61,12 +67,16 @@ namespace DSMlib
         {
             weight.CopyOutFromCuda();
             bias.CopyOutFromCuda();
+            if (Nt == N_Type.bLSTM)
+                recur_weight.CopyOutFromCuda();
         }
 
         unsafe public void CopyIntoCuda()
         {
             weight.CopyIntoCuda();
             bias.CopyIntoCuda();
+            if (Nt == N_Type.bLSTM)
+                recur_weight.CopyIntoCuda();
         }
 
         //***** Modified by Ziyu Guan
@@ -110,10 +120,18 @@ namespace DSMlib
             {
                 weight = new CudaPieceFloat((Neural_In.Number * N_Winsize + Extra_Input.Number) * Neural_Out.Number, true, backupOnly ? false : true); // output * input, output * extra_input
             }
+            else if (Nt == N_Type.bLSTM)
+            {// Note that output size is double the number of dimensions of LSTM output since it is bidirectional, i.e. we have two sets of LSTMs
+                weight = new CudaPieceFloat(Neural_In.Number * (Neural_Out.Number/2) * 4 * 2, true, backupOnly ? false : true);
+                recur_weight = new CudaPieceFloat((Neural_Out.Number / 2) * (Neural_Out.Number / 2) * 4 * 2, true, backupOnly ? false : true);
+            }
             else
                 weight = new CudaPieceFloat(Neural_In.Number * Neural_Out.Number * N_Winsize, true, backupOnly ? false : true);
             
-            bias = new CudaPieceFloat(Neural_Out.Number, true, backupOnly ? false : true);           
+            if (Nt == N_Type.bLSTM)
+                bias = new CudaPieceFloat((Neural_Out.Number/2) * 4 * 2, true, backupOnly ? false : true);
+            else 
+                bias = new CudaPieceFloat(Neural_Out.Number, true, backupOnly ? false : true);           
         }
         //***** Modified by Ziyu Guan
 
@@ -127,6 +145,8 @@ namespace DSMlib
         {
             weight.Dispose();
             bias.Dispose();
+            if (recur_weight != null)
+                recur_weight.Dispose();
             if (winsizes != null)
                 winsizes.Dispose();
             if (fmsizes != null)
@@ -134,6 +154,14 @@ namespace DSMlib
         }
 
         //***** Modified by Ziyu Guan
+        private void fillRand(float[] arr, int insize, int outsize, Random random)
+        {
+            float scale = (float)(Math.Sqrt(6.0 / (insize + outsize)) * 2);
+            float bias = (float)(-Math.Sqrt(6.0 / (insize + outsize)));
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] = (float)(random.NextDouble() * scale + bias);
+        }
+
         public void Init()
         {
             if (Nt == N_Type.MultiWidthConv_layer)
@@ -155,6 +183,22 @@ namespace DSMlib
                 }
                 weight.Init(initWei);
             }
+            else if (Nt == N_Type.bLSTM)
+            {
+                // init the 8 weight matrics (each of size (outputDim/2)*inputDim) for input and 8 weight matrics for recurrent input (each of size (outputDim/2)*(outputDim/2))
+                float[] initWei = new float[weight.Size];
+                Random random = ParameterSetting.Random;
+                int insize = Neural_In.Number;
+                int outsize = Neural_Out.Number / 2;
+                fillRand(initWei, insize, outsize, random);
+                weight.Init(initWei);
+
+                float[] initWei2 = new float[recur_weight.Size];
+                insize = Neural_Out.Number / 2;
+                outsize = Neural_Out.Number / 2;
+                fillRand(initWei2, insize, outsize, random);
+                recur_weight.Init(initWei2);
+            }
             else
             {
                 int inputsize = Neural_In.Number * N_Winsize;
@@ -172,12 +216,18 @@ namespace DSMlib
         {
             weight.Init(wei_scale, wei_bias);
             bias.Init(initHidBias);
+
+            if (Nt == N_Type.bLSTM)
+                recur_weight.Init(wei_scale, wei_bias);
         }
 
         public void Init(NeuralLink refLink)
         {
             weight.Init(refLink.Back_Weight);
             bias.Init(refLink.Back_Bias);
+
+            if (Nt == N_Type.bLSTM)
+                recur_weight.Init(refLink.Back_reWeight);
         }        
     }
 
@@ -300,6 +350,11 @@ namespace DSMlib
                         for (int j = 0; j < neurallinks[i].num_fms.Length; j++)
                             num += neurallinks[i].Neural_In.Number * neurallinks[i].wnd_sizes[j] * neurallinks[i].num_fms[j];
                     }
+                    else if (neurallinks[i].Nt == N_Type.bLSTM)
+                    {
+                        num += neurallinks[i].Neural_In.Number * (neurallinks[i].Neural_Out.Number / 2) * 4 * 2;
+                        num += (neurallinks[i].Neural_Out.Number / 2) * (neurallinks[i].Neural_Out.Number / 2) * 4 * 2;
+                    }
                     else // for Composite Full layer
                     {
                         num += (neurallinks[i].Neural_In.Number * neurallinks[i].N_Winsize + neurallinks[i].Extra_Input.Number) * neurallinks[i].Neural_Out.Number;
@@ -307,7 +362,10 @@ namespace DSMlib
 
                     if (ParameterSetting.UpdateBias)
                     {
-                        num += neurallinks[i].Neural_Out.Number;
+                        if (neurallinks[i].Nt == N_Type.bLSTM)
+                            num += (neurallinks[i].Neural_Out.Number / 2) * 4 * 2;
+                        else
+                            num += neurallinks[i].Neural_Out.Number;
                     }
 
                     NUM += num;
@@ -401,11 +459,30 @@ namespace DSMlib
                     mwriter.Write(neurallinks[i].Back_Weight[m]);
                 }
 
-                mwriter.Write(neurallinks[i].Neural_Out.Number);
-                for (int m = 0; m < neurallinks[i].Neural_Out.Number; m++)
+                if (neurallinks[i].Nt == N_Type.bLSTM)
                 {
-                    mwriter.Write(neurallinks[i].Back_Bias[m]);
+                    //store recurrent weights
+                    mwriter.Write(neurallinks[i].Back_reWeight.Length);
+                    for (int kk = 0; kk < neurallinks[i].Back_reWeight.Length; kk++)
+                    {
+                        mwriter.Write(neurallinks[i].Back_reWeight[kk]);
+                    }
+                    //store bias
+                    mwriter.Write(neurallinks[i].Back_Bias.Length);
+                    for (int kk = 0; kk < neurallinks[i].Back_Bias.Length; kk++)
+                    {
+                        mwriter.Write(neurallinks[i].Back_Bias[kk]);
+                    }
+                } 
+                else
+                {
+                    mwriter.Write(neurallinks[i].Neural_Out.Number);
+                    for (int m = 0; m < neurallinks[i].Neural_Out.Number; m++)
+                    {
+                        mwriter.Write(neurallinks[i].Back_Bias[m]);
+                    }
                 }
+                
             }
 
             //finally write Lookup table
@@ -503,6 +580,20 @@ namespace DSMlib
                 for (int m = 0; m < weight_len; m++)
                 {
                     neurallinks[i].Back_Weight[m] = mreader.ReadSingle();
+                }
+
+                if (neurallinks[i].Nt == N_Type.bLSTM)
+                {
+                    int recuWeight_len = mreader.ReadInt32();
+                    if (recuWeight_len != neurallinks[i].Back_reWeight.Length)
+                    {
+                        Console.WriteLine("Loading Model Recurrent Weight Error on layer" + i.ToString() + "!  " + recuWeight_len.ToString() + " " + neurallinks[i].Back_reWeight.Length.ToString());
+                        Console.ReadLine();
+                    }
+                    for (int m = 0; m < recuWeight_len; m++)
+                    {
+                        neurallinks[i].Back_reWeight[m] = mreader.ReadSingle();
+                    }
                 }
                 int bias_len = mreader.ReadInt32();
                 if (bias_len != neurallinks[i].Back_Bias.Length)
@@ -666,6 +757,10 @@ namespace DSMlib
                 else if (neurallinks[i].Nt == N_Type.Convolution_layer)
                 {
                     result += " Window Size : " + neurallinks[i].N_Winsize.ToString() + ";";
+                    result += " Pooling Type : " + neurallinks[i].pool_type.ToString() + ";" + "\n";
+                }
+                else if (neurallinks[i].Nt == N_Type.bLSTM)
+                {
                     result += " Pooling Type : " + neurallinks[i].pool_type.ToString() + ";" + "\n";
                 }
                 else if (neurallinks[i].Nt == N_Type.Composite_Full)
@@ -886,8 +981,8 @@ namespace DSMlib
                 errorDerivs = new CudaPieceFloat[3];
                 for (int i = 0; i < outputs.Length; i++)
                 {
-                    outputs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, false, true);
-                    errorDerivs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, false, true);                   
+                    outputs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, ParameterSetting.DEBUG ? true : false, true);
+                    errorDerivs[i] = new CudaPieceFloat(ParameterSetting.BATCH_SIZE * Number, ParameterSetting.DEBUG ? true : false, true);                   
                 }
             }
         }
@@ -949,6 +1044,7 @@ namespace DSMlib
         /// </summary>
         CudaPieceFloat[] layerPoolingOutputs = null;
 
+        // for LSTM , this stores output h_t for each time step, of dimension (2*output_dim) * batchsize
         public CudaPieceFloat[] LayerPoolingOutputs
         {
             get { return layerPoolingOutputs; }
@@ -963,12 +1059,55 @@ namespace DSMlib
             get { return layerMaxPooling_Indices; }
         }
 
+        // for LSTM exclusively, storing internal state c (forward) or derivative of c (backward)
+        CudaPieceFloat[] layerPoolingInternalState = null;
+        public CudaPieceFloat[] LayerPoolingInternalState
+        {
+            get { return layerPoolingInternalState; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal input a, a =  tanh(W_a *x + U_a * h + b_a)
+        CudaPieceFloat[] layerPoolingA = null;
+        public CudaPieceFloat[] LayerPoolingA
+        {
+            get { return layerPoolingA; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal input gates
+        CudaPieceFloat[] layerPoolingI = null;
+        public CudaPieceFloat[] LayerPoolingI
+        {
+            get { return layerPoolingI; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal forget gates
+        CudaPieceFloat[] layerPoolingF = null;
+        public CudaPieceFloat[] LayerPoolingF
+        {
+            get { return layerPoolingF; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal output gates
+        CudaPieceFloat[] layerPoolingO = null;
+        public CudaPieceFloat[] LayerPoolingO
+        {
+            get { return layerPoolingO; }
+        }
+
         CudaPieceFloat weightDeriv = null;
 
         public CudaPieceFloat WeightDeriv
         {
             get { return weightDeriv; }
         }
+
+        CudaPieceFloat reweightDeriv = null;
+        public CudaPieceFloat reWeightDeriv
+        {
+            get { return reweightDeriv; }
+        }
+
+
         CudaPieceFloat biasDeriv = null;
 
         public CudaPieceFloat BiasDeriv
@@ -1006,6 +1145,14 @@ namespace DSMlib
         {
             get { return weightUpdate; }
         }
+
+        CudaPieceFloat reweightUpdate = null;
+        public CudaPieceFloat reWeightUpdate
+        {
+            get { return reweightUpdate; }
+        }
+
+
         CudaPieceFloat biasUpdate = null;
 
         public CudaPieceFloat BiasUpdate
@@ -1020,6 +1167,15 @@ namespace DSMlib
         {
             get { return weightAdaGrad; }
         }
+
+        CudaPieceFloat reweightAdaGrad = null;
+
+        public CudaPieceFloat reWeightAdaGrad
+        {
+            get { return reweightAdaGrad; }
+        }
+
+
         CudaPieceFloat biasAdaGrad = null;
 
         public CudaPieceFloat BiasAdaGrad
@@ -1031,19 +1187,40 @@ namespace DSMlib
         {
             neuralLinkModel = neuralLink;
             
-            if (neuralLinkModel.Nt == N_Type.Convolution_layer || neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
+            if (neuralLinkModel.Nt == N_Type.Convolution_layer || neuralLinkModel.Nt == N_Type.MultiWidthConv_layer || neuralLinkModel.Nt == N_Type.bLSTM)
             {
                 layerPoolingOutputs = new CudaPieceFloat[3];
                 layerMaxPooling_Indices = new CudaPieceInt[3];
                 for (int i = 0; i < 3; i++)
                 {
                     // **now has the same shape as in single convolution, but some cells are invalid** for multi-window case, we still allocate the same size of space, but pooling output stores three matrices, each of size (seg_size - batchsize*(win_size-1))* fm_size
-                    layerPoolingOutputs[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, false, true);
-                    layerMaxPooling_Indices[i] = new CudaPieceInt(ParameterSetting.BATCH_SIZE * neuralLinkModel.Neural_Out.Number, false, true);
-                }                 
+                    layerPoolingOutputs[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                    layerMaxPooling_Indices[i] = new CudaPieceInt(ParameterSetting.BATCH_SIZE * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                }
+                
+                if (neuralLinkModel.Nt == N_Type.bLSTM)
+                {
+                    layerPoolingInternalState = new CudaPieceFloat[3];
+                    layerPoolingA = new CudaPieceFloat[3];
+                    layerPoolingI = new CudaPieceFloat[3];
+                    layerPoolingF = new CudaPieceFloat[3];
+                    layerPoolingO = new CudaPieceFloat[3];
+                    // initialize all pooling variables dedicated to LSTM
+                    for (int i = 0; i < 3; i++)
+                    {
+                        layerPoolingInternalState[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                        layerPoolingA[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                        layerPoolingI[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                        layerPoolingF[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                        layerPoolingO[i] = new CudaPieceFloat(PairInputStream.MAXSEGMENT_BATCH * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG ? true : false, true);
+                    }
+                    
+                }
             }
 
             int totalweightsize = 0;
+            int totalreweightsize = 0;
+            int totalbiassize = neuralLinkModel.Neural_Out.Number;
             if (neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
             {
                 for (int i = 0; i < neuralLinkModel.wnd_sizes.Length; i++)
@@ -1057,25 +1234,38 @@ namespace DSMlib
                 composite_errors = new CudaPieceFloat[3];
                 for (int i = 0; i < composite_errors.Length; i++)
                 {
-                    composite_outputs[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, false, true);
-                    composite_errors[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, false, true);
+                    composite_outputs[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, ParameterSetting.DEBUG ? true : false, true);
+                    composite_errors[i] = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * ParameterSetting.BATCH_SIZE, ParameterSetting.DEBUG ? true : false, true);
                 }
+            }
+            else if (neuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                // calculate the size of weight and recurrent weight
+                totalweightsize = neuralLinkModel.Neural_In.Number * (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
+                totalreweightsize = (neuralLinkModel.Neural_Out.Number / 2) * (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
+                totalbiassize = (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
             }
             else
                 totalweightsize = neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize;
 
             weightDeriv = new CudaPieceFloat(totalweightsize, ParameterSetting.CheckGrad ? true : false, true);
-            biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, ParameterSetting.CheckGrad ? true : false, true);
+            biasDeriv = new CudaPieceFloat(totalbiassize, ParameterSetting.CheckGrad ? true : false, true);
+            if (neuralLinkModel.Nt == N_Type.bLSTM)
+                reweightDeriv = new CudaPieceFloat(totalreweightsize, ParameterSetting.CheckGrad ? true : false, true);
 
             if (ParameterSetting.updateScheme == 1)
             {
                 weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
-                biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
+                biasUpdate = new CudaPieceFloat(totalbiassize, false, true);
+                if (neuralLinkModel.Nt == N_Type.bLSTM)
+                    reweightUpdate = new CudaPieceFloat(totalreweightsize, false, true);
             }
             else if (ParameterSetting.updateScheme == 2)
             {
                 weightAdaGrad = new CudaPieceFloat(totalweightsize, false, true, ParameterSetting.initAdaGrad);
-                biasAdaGrad = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true, ParameterSetting.initAdaGrad);
+                biasAdaGrad = new CudaPieceFloat(totalbiassize, false, true, ParameterSetting.initAdaGrad);
+                if (neuralLinkModel.Nt == N_Type.bLSTM)
+                    reweightAdaGrad = new CudaPieceFloat(totalreweightsize, false, true, ParameterSetting.initAdaGrad);
             }
         }
 
@@ -1121,6 +1311,10 @@ namespace DSMlib
             {
                 biasDeriv.Dispose();
             }
+            if (reweightDeriv != null)
+            {
+                reweightDeriv.Dispose();
+            }
             if (weightUpdate != null)
             {
                 weightUpdate.Dispose();
@@ -1129,16 +1323,52 @@ namespace DSMlib
             {
                 biasUpdate.Dispose();
             }
+            if (reweightUpdate != null)
+                reweightUpdate.Dispose();
             if (weightAdaGrad != null)
                 weightAdaGrad.Dispose();
             if (biasAdaGrad != null)
                 biasAdaGrad.Dispose();
+            if (reweightAdaGrad != null)
+                reweightAdaGrad.Dispose();
+            if (layerPoolingInternalState != null)
+            {
+                foreach (CudaPieceFloat e in layerPoolingInternalState)
+                    e.Dispose();
+                layerPoolingInternalState = null;
+            }
+            if (layerPoolingA != null)
+            {
+                foreach (CudaPieceFloat e in layerPoolingA)
+                    e.Dispose();
+                layerPoolingA = null;
+            }
+            if (layerPoolingI != null)
+            {
+                foreach (CudaPieceFloat e in layerPoolingI)
+                    e.Dispose();
+                layerPoolingI = null;
+            }
+            if (layerPoolingF != null)
+            {
+                foreach (CudaPieceFloat e in layerPoolingF)
+                    e.Dispose();
+                layerPoolingF = null;
+            }
+            if (layerPoolingO != null)
+            {
+                foreach (CudaPieceFloat e in layerPoolingO)
+                    e.Dispose();
+                layerPoolingO = null;
+            }
         }        
 
         public void ZeroDeriv()
         {
             weightDeriv.Zero();
             biasDeriv.Zero();
+            if (neuralLinkModel.Nt == N_Type.bLSTM)
+                reweightDeriv.Zero();
         }
     }
 
@@ -1193,7 +1423,7 @@ namespace DSMlib
                 {
                     if (neurallink.Nt == N_Type.Fully_Connected)
                     {
-                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional!");
+                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional or birectional LSTM!");
                         //MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Multiply_INTEX(data, neurallink.weight, neurallayers[layerIndex + 1].Outputs[q],
                         //               neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
                     }
@@ -1202,6 +1432,20 @@ namespace DSMlib
                         MathOperatorManager.GlobalInstance.Convolution_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutputs[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
 
                         MathOperatorManager.GlobalInstance.Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number, neurallink.N_Winsize);
+                    }
+                    else if (neurallink.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.LSTM_Input_Batch_Product(data, neurallink.weight, neurallinkData.LayerPoolingA[q], neurallinkData.LayerPoolingI[q], neurallinkData.LayerPoolingF[q], neurallinkData.LayerPoolingO[q], wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number);
+
+                        MathOperatorManager.GlobalInstance.LSTM_Sequence_Forward(data, neurallink.recur_weight, neurallink.bias, neurallinkData.LayerPoolingA[q], neurallinkData.LayerPoolingI[q], neurallinkData.LayerPoolingF[q], neurallinkData.LayerPoolingO[q], neurallinkData.LayerPoolingInternalState[q], neurallinkData.LayerPoolingOutputs[q], neurallink.Neural_Out.Number);
+                        //neurallinkData.LayerPoolingA[q].CopyOutFromCuda();
+                        //neurallinkData.LayerPoolingI[q].CopyOutFromCuda();
+                        //neurallinkData.LayerPoolingF[q].CopyOutFromCuda();
+                        //neurallinkData.LayerPoolingO[q].CopyOutFromCuda();
+                        //neurallinkData.LayerPoolingInternalState[q].CopyOutFromCuda();
+                        //neurallinkData.LayerPoolingOutputs[q].CopyOutFromCuda();
+
+                        MathOperatorManager.GlobalInstance.LSTM_Max_Pooling(neurallinkData.LayerPoolingOutputs[q], data, neurallayers[layerIndex + 1].Outputs[q], neurallinkData.LayerMaxPooling_Indices[q], neurallink.Neural_Out.Number);
                     }
                     else  // must be multi-convolutional, composite layer cannot be the first layer
                     {
@@ -1228,18 +1472,22 @@ namespace DSMlib
                 }
 
 
-                if (neurallink.Af == A_Func.Tanh)
+                if (neurallink.Nt != N_Type.bLSTM)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    if (neurallink.Af == A_Func.Tanh)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Linear)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Rectified)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
                 }
-                else if (neurallink.Af == A_Func.Linear)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
-                else if (neurallink.Af == A_Func.Rectified)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Outputs[q], neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
+
                 layerIndex += 1;
             }
         }
@@ -1267,14 +1515,31 @@ namespace DSMlib
                             nlink.Neural_In.Number, nlink.Extra_Input.Number, 0);
                 }
 
-                if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Tanh)
+                if (i != 1 || neurallinks[0].NeuralLinkModel.Nt != N_Type.bLSTM)
                 {
-                    MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
+                    if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Tanh)
+                    {
+                        MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
+                    }
+                    else if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Rectified)
+                    {
+                        MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
+                    }
                 }
-                else if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Rectified)
-                {
-                    MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDerivs[q], neurallayers[i].Outputs[q], batchsize, nlink.Neural_In.Number);
-                }
+            }
+
+            if (neurallinks[0].NeuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                // error back propagation in time
+                MathOperatorManager.GlobalInstance.LSTM_Sequence_Backward(input_batch, neurallinks[0].NeuralLinkModel.recur_weight,
+                    neurallinks[0].LayerMaxPooling_Indices[q], neurallayers[1].ErrorDerivs[q], neurallinks[0].LayerPoolingA[q],
+                    neurallinks[0].LayerPoolingI[q], neurallinks[0].LayerPoolingF[q], neurallinks[0].LayerPoolingO[q],
+                    neurallinks[0].LayerPoolingInternalState[q], neurallinks[0].LayerPoolingOutputs[q], neurallinks[0].NeuralLinkModel.Neural_Out.Number);
+
+                neurallinks[0].LayerPoolingA[q].CopyOutFromCuda();
+                neurallinks[0].LayerPoolingI[q].CopyOutFromCuda();
+                neurallinks[0].LayerPoolingF[q].CopyOutFromCuda();
+                neurallinks[0].LayerPoolingO[q].CopyOutFromCuda();
             }
         }
 
@@ -1286,7 +1551,7 @@ namespace DSMlib
             {
                 neurallinks[i].ZeroDeriv();
 
-                if (ParameterSetting.UpdateBias)
+                if (ParameterSetting.UpdateBias && neurallinks[i].NeuralLinkModel.Nt != N_Type.bLSTM)
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Aggragate(neurallayers[i + 1].ErrorDerivs[0], neurallayers[i + 1].ErrorDerivs[1], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].BiasDeriv, batchsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                 }
@@ -1295,7 +1560,7 @@ namespace DSMlib
                 {
                     if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Fully_Connected)
                     {
-                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional!");
+                        throw new Exception("Not implemented! The first layer must be convolutional or multi-convolutional or bidirectional LSTM!");
                         //MathOperatorManager.GlobalInstance.SEQ_Sparse_Matrix_Transpose_Multiply_INTEX(input_batch, neurallinks[i].WeightDeriv, neurallayers[i + 1].ErrorDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number, neurallinks[i].NeuralLinkModel.Neural_Out.Number, neurallinks[i].NeuralLinkModel.N_Winsize);
                     }
                     else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Convolution_layer)
@@ -1303,6 +1568,26 @@ namespace DSMlib
                         MathOperatorManager.GlobalInstance.Convolution_Matrix_Product_INTEX(neurallayers[i + 1].ErrorDerivs[0], neurallinks[i].LayerMaxPooling_Indices[0], neurallayers[i + 1].ErrorDerivs[1], neurallinks[i].LayerMaxPooling_Indices[1], neurallayers[i + 1].ErrorDerivs[2], neurallinks[i].LayerMaxPooling_Indices[2], wordLT.Table, 
                                      input_batches[0], input_batches[1], input_batches[2], neurallinks[i].NeuralLinkModel.N_Winsize,
                                      batchsize, neurallayers[i + 1].Number, neurallinks[i].WeightDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number);
+                    }
+                    else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.LSTM_Weight_Deriv(input_batches[0], input_batches[1], input_batches[2], wordLT.Table, neurallinks[i].WeightDeriv,
+                            neurallinks[i].LayerPoolingA[0], neurallinks[i].LayerPoolingA[1], neurallinks[i].LayerPoolingA[2], neurallinks[i].LayerPoolingI[0],
+                            neurallinks[i].LayerPoolingI[1], neurallinks[i].LayerPoolingI[2], neurallinks[i].LayerPoolingF[0], neurallinks[i].LayerPoolingF[1],
+                            neurallinks[i].LayerPoolingF[2], neurallinks[i].LayerPoolingO[0], neurallinks[i].LayerPoolingO[1], neurallinks[i].LayerPoolingO[2],
+                            neurallinks[i].LayerPoolingOutputs[0], neurallinks[i].LayerPoolingOutputs[1], neurallinks[i].LayerPoolingOutputs[2], neurallinks[i].NeuralLinkModel.Neural_In.Number,
+                            neurallinks[i].NeuralLinkModel.Neural_Out.Number, 0);
+                        MathOperatorManager.GlobalInstance.LSTM_Weight_Deriv(input_batches[0], input_batches[1], input_batches[2], wordLT.Table, neurallinks[i].reWeightDeriv,
+                            neurallinks[i].LayerPoolingA[0], neurallinks[i].LayerPoolingA[1], neurallinks[i].LayerPoolingA[2], neurallinks[i].LayerPoolingI[0],
+                            neurallinks[i].LayerPoolingI[1], neurallinks[i].LayerPoolingI[2], neurallinks[i].LayerPoolingF[0], neurallinks[i].LayerPoolingF[1],
+                            neurallinks[i].LayerPoolingF[2], neurallinks[i].LayerPoolingO[0], neurallinks[i].LayerPoolingO[1], neurallinks[i].LayerPoolingO[2],
+                            neurallinks[i].LayerPoolingOutputs[0], neurallinks[i].LayerPoolingOutputs[1], neurallinks[i].LayerPoolingOutputs[2], neurallinks[i].NeuralLinkModel.Neural_In.Number,
+                            neurallinks[i].NeuralLinkModel.Neural_Out.Number, 1);
+                        MathOperatorManager.GlobalInstance.LSTM_Bias_Deriv(input_batches[0], input_batches[1], input_batches[2], neurallinks[i].BiasDeriv,
+                            neurallinks[i].LayerPoolingA[0], neurallinks[i].LayerPoolingA[1], neurallinks[i].LayerPoolingA[2], neurallinks[i].LayerPoolingI[0],
+                            neurallinks[i].LayerPoolingI[1], neurallinks[i].LayerPoolingI[2], neurallinks[i].LayerPoolingF[0], neurallinks[i].LayerPoolingF[1],
+                            neurallinks[i].LayerPoolingF[2], neurallinks[i].LayerPoolingO[0], neurallinks[i].LayerPoolingO[1], neurallinks[i].LayerPoolingO[2],
+                            neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                     }
                     else // must be multi-convolutional, composite layer cannot be the first layer
                     {
@@ -1339,6 +1624,14 @@ namespace DSMlib
                 {
                     MathOperatorManager.GlobalInstance.MultiConv_Compute_WVDERIV(neurallayers[1].ErrorDerivs[i], neurallinks[0].LayerMaxPooling_Indices[i], neurallinks[0].NeuralLinkModel.weight, batchsize,
                                 neurallayers[1].Number, wordLT.InputDeriv[i], neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.winsizes, neurallinks[0].NeuralLinkModel.fmsizes);
+                }
+            }
+            else if (neurallinks[0].NeuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    MathOperatorManager.GlobalInstance.LSTM_Compute_WVDeriv(input_batches[i].elementSize, neurallinks[0].NeuralLinkModel.weight, wordLT.InputDeriv[i], neurallinks[0].LayerPoolingA[i],
+                        neurallinks[0].LayerPoolingI[i], neurallinks[0].LayerPoolingF[i], neurallinks[0].LayerPoolingO[i], neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.Neural_Out.Number);
                 }
             }
             else // convolution
@@ -1383,9 +1676,11 @@ namespace DSMlib
             /// First, update weights and bias
             /// step 1, compute the weight updates, taking momentum and learning rates into consideration
             /// Wei_Update = momentum * Wei_Update + learn_rate * grad.
-            int row, col;
+            int row = 0, col = 0, rerow = 0, recol = 0;
+            
             for (int i = 0; i < neurallinks.Count; i++)
             {
+                int biassize = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
                 if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Composite_Full)
                 {
                     row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
@@ -1396,6 +1691,14 @@ namespace DSMlib
                     // treat feature dimensin as num of rows
                     row = neurallinks[i].NeuralLinkModel.Neural_In.Number;
                     col = neurallinks[i].NeuralLinkModel.ma_sizes[neurallinks[i].NeuralLinkModel.ma_sizes.Length - 1] / row;
+                }
+                else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                {
+                    row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    col = neurallinks[i].NeuralLinkModel.Neural_In.Number * 4;
+                    rerow = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    recol = neurallinks[i].NeuralLinkModel.Neural_Out.Number * 2;
+                    biassize = neurallinks[i].NeuralLinkModel.Neural_Out.Number * 4;
                 }
                 else
                 {
@@ -1413,14 +1716,25 @@ namespace DSMlib
 
                     // update the model: Weight = Weight += Wei_Update
                     MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, col, row);
+
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].reWeightUpdate, recol, rerow, momentum);
+                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].reWeightUpdate, neurallinks[i].reWeightDeriv, recol, rerow, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightUpdate, recol, rerow);
+                    }
                 }
                 else if (ParameterSetting.updateScheme == 0)
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, col, row, learning_rate);
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightDeriv, recol, rerow, learning_rate);
                 }
                 else // AdaGrad
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, neurallinks[i].WeightAdaGrad, col, row, learning_rate, ParameterSetting.DSSMEpsilon);
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightDeriv, neurallinks[i].reWeightAdaGrad, recol, rerow, learning_rate, ParameterSetting.DSSMEpsilon);
                 }
 
                 if (ParameterSetting.UpdateBias)
@@ -1428,20 +1742,20 @@ namespace DSMlib
                     if (ParameterSetting.updateScheme == 1)
                     {
                         // add the momentum
-                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, momentum);
+                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, biassize, momentum);
 
                         // dnn_neurallinks[i].Weight
-                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, biassize, learning_rate);
                         // upate the model
-                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, biassize);
                     }
                     else if (ParameterSetting.updateScheme == 0)
                     {
-                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, 1, biassize, learning_rate);
                     }
                     else // AdaGrad
                     {
-                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate, ParameterSetting.DSSMEpsilon);
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, biassize, learning_rate, ParameterSetting.DSSMEpsilon);
                     }
                 }
             }
@@ -1605,7 +1919,6 @@ namespace DSMlib
         /// given batch of input data. calculate the output.
         /// </summary>
         /// <param name="data"></param>
-        /// <param name="q">indicate which sentence in an instance, 0 -- s1, 1 -- s2, 2 -- s3</param>
         //unsafe public void forward_activate( BatchSample_Input data, List<Amplib.AMPArrayInternal> layerOutputs)
         unsafe public void forward_activate(BatchSample_Input data)
         {
@@ -1628,6 +1941,12 @@ namespace DSMlib
 
                         MathOperatorManager.GlobalInstance.Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number, neurallink.N_Winsize);
                     }
+                    else if (neurallink.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.LSTM_Input_Batch_Product(data, neurallink.weight, neurallinkData.LayerPoolingA, neurallinkData.LayerPoolingI, neurallinkData.LayerPoolingF, neurallinkData.LayerPoolingO, DnnModel.wordLT, neurallink.Neural_In.Number, neurallink.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.LSTM_Sequence_Forward(data, neurallink.recur_weight, neurallink.bias, neurallinkData.LayerPoolingA, neurallinkData.LayerPoolingI, neurallinkData.LayerPoolingF, neurallinkData.LayerPoolingO, neurallinkData.LayerPoolingInternalState, neurallinkData.LayerPoolingOutput, neurallink.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.LSTM_Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number);
+                    }
                     else  // must be multi-convolutional, composite layer cannot be the first layer
                     {
                         MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, DnnModel.wordLT, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
@@ -1646,18 +1965,20 @@ namespace DSMlib
                         MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[layerIndex].Output, neurallink.weight, neurallayers[layerIndex + 1].Output, data.batchsize, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, 0);
                 }
 
-
-                if (neurallink.Af == A_Func.Tanh)
+                if (neurallink.Nt != N_Type.bLSTM)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
-                else if (neurallink.Af == A_Func.Linear)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
-                else if (neurallink.Af == A_Func.Rectified)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    if (neurallink.Af == A_Func.Tanh)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Linear)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Rectified)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
                 }
                 layerIndex += 1;
             }
@@ -1700,7 +2021,6 @@ namespace DSMlib
         /// given batch of input data. calculate the output.
         /// </summary>
         /// <param name="data"></param>
-        /// <param name="q">indicate which sentence in an instance, 0 -- s1, 1 -- s2, 2 -- s3</param>
         //unsafe public void forward_activate( BatchSample_Input data, List<Amplib.AMPArrayInternal> layerOutputs)
         unsafe public void forward_activate(BatchSample_Input data)
         {
@@ -1719,13 +2039,19 @@ namespace DSMlib
                     }
                     else if (neurallink.Nt == N_Type.Convolution_layer)
                     {
-                        MathOperatorManager.GlobalInstance.Convolution_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
+                        MathOperatorManager.GlobalInstance.Convolution_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, DnnModel.wordLT, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.N_Winsize);
 
                         MathOperatorManager.GlobalInstance.Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number, neurallink.N_Winsize);
                     }
+                    else if (neurallink.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.LSTM_Input_Batch_Product(data, neurallink.weight, neurallinkData.LayerPoolingA, neurallinkData.LayerPoolingI, neurallinkData.LayerPoolingF, neurallinkData.LayerPoolingO, DnnModel.wordLT, neurallink.Neural_In.Number, neurallink.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.LSTM_Sequence_Forward(data, neurallink.recur_weight, neurallink.bias, neurallinkData.LayerPoolingA, neurallinkData.LayerPoolingI, neurallinkData.LayerPoolingF, neurallinkData.LayerPoolingO, neurallinkData.LayerPoolingInternalState, neurallinkData.LayerPoolingOutput, neurallink.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.LSTM_Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number);
+                    }
                     else  // must be multi-convolutional, composite layer cannot be the first layer
                     {
-                        MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, wordLT.Table, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
+                        MathOperatorManager.GlobalInstance.MultiConv_Matrix_Multiply_INTEX(data, neurallink.weight, neurallinkData.LayerPoolingOutput, DnnModel.wordLT, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
 
                         MathOperatorManager.GlobalInstance.Multi_Max_Pooling(neurallinkData.LayerPoolingOutput, data, neurallayers[layerIndex + 1].Output, neurallinkData.LayerMaxPooling_Index, neurallink.Neural_Out.Number, neurallink.winsizes, neurallink.fmsizes);
                     }
@@ -1734,25 +2060,27 @@ namespace DSMlib
                 {
                     if (neurallink.Nt == N_Type.Composite_Full)
                     {
-                        MathOperatorManager.GlobalInstance.FillOut_Composite(neurallayers[layerIndex].Output, data, neurallinkData.CompOutput, contextLT.Table, null, neurallink.Neural_In.Number, neurallink.Extra_Input.Number, 1);
+                        MathOperatorManager.GlobalInstance.FillOut_Composite(neurallayers[layerIndex].Output, data, neurallinkData.CompOutput, DnnModel.contextLT, null, neurallink.Neural_In.Number, neurallink.Extra_Input.Number, 1);
                         MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallinkData.CompOutput, neurallink.weight, neurallayers[layerIndex + 1].Output, data.batchsize, neurallink.Neural_In.Number + neurallink.Extra_Input.Number, neurallink.Neural_Out.Number, 0);
                     }
                     else
                         MathOperatorManager.GlobalInstance.Matrix_Multipy(neurallayers[layerIndex].Output, neurallink.weight, neurallayers[layerIndex + 1].Output, data.batchsize, neurallink.Neural_In.Number, neurallink.Neural_Out.Number, 0);
                 }
 
-
-                if (neurallink.Af == A_Func.Tanh)
+                if (neurallink.Nt != N_Type.bLSTM)
                 {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
-                else if (neurallink.Af == A_Func.Linear)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
-                }
-                else if (neurallink.Af == A_Func.Rectified)
-                {
-                    MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    if (neurallink.Af == A_Func.Tanh)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Tanh(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Linear)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Add_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
+                    else if (neurallink.Af == A_Func.Rectified)
+                    {
+                        MathOperatorManager.GlobalInstance.Matrix_Rectified_Vector(neurallayers[layerIndex + 1].Output, neurallink.bias, data.batchsize, neurallink.Neural_Out.Number);
+                    }
                 }
                 layerIndex += 1;
             }
@@ -1781,14 +2109,26 @@ namespace DSMlib
                             nlink.Neural_In.Number, nlink.Extra_Input.Number, 0);
                 }
 
-                if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Tanh)
+                if (i != 1 || neurallinks[0].NeuralLinkModel.Nt != N_Type.bLSTM)
                 {
-                    MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, nlink.Neural_In.Number);
+                    if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Tanh)
+                    {
+                        MathOperatorManager.GlobalInstance.Deriv_Tanh(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, nlink.Neural_In.Number);
+                    }
+                    else if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Rectified)
+                    {
+                        MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, nlink.Neural_In.Number);
+                    }
                 }
-                else if (neurallinks[i - 1].NeuralLinkModel.Af == A_Func.Rectified)
-                {
-                    MathOperatorManager.GlobalInstance.Deriv_Rectified(neurallayers[i].ErrorDeriv, neurallayers[i].Output, batchsize, nlink.Neural_In.Number);
-                }
+            }
+
+            if (neurallinks[0].NeuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                // error back propagation in time
+                MathOperatorManager.GlobalInstance.LSTM_Sequence_Backward(input_batch, neurallinks[0].NeuralLinkModel.recur_weight,
+                    neurallinks[0].LayerMaxPooling_Index, neurallayers[1].ErrorDeriv, neurallinks[0].LayerPoolingA,
+                    neurallinks[0].LayerPoolingI, neurallinks[0].LayerPoolingF, neurallinks[0].LayerPoolingO,
+                    neurallinks[0].LayerPoolingInternalState, neurallinks[0].LayerPoolingOutput, neurallinks[0].NeuralLinkModel.Neural_Out.Number);
             }
         }
 
@@ -1800,7 +2140,7 @@ namespace DSMlib
             {
                 neurallinks[i].ZeroDeriv();
 
-                if (ParameterSetting.UpdateBias)
+                if (ParameterSetting.UpdateBias && neurallinks[i].NeuralLinkModel.Nt != N_Type.bLSTM)
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Aggragate_Sup(neurallayers[i + 1].ErrorDeriv, neurallinks[i].BiasDeriv, batchsize, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                 }
@@ -1817,6 +2157,21 @@ namespace DSMlib
                         MathOperatorManager.GlobalInstance.Convolution_Matrix_Product_Sup(neurallayers[i + 1].ErrorDeriv, neurallinks[i].LayerMaxPooling_Index, wordLT.Table,
                                      input_batch, neurallinks[i].NeuralLinkModel.N_Winsize,
                                      batchsize, neurallayers[i + 1].Number, neurallinks[i].WeightDeriv, neurallinks[i].NeuralLinkModel.Neural_In.Number);
+                    }
+                    else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.LSTM_Weight_Deriv_Sup(input_batch, wordLT.Table, neurallinks[i].WeightDeriv,
+                            neurallinks[i].LayerPoolingA, neurallinks[i].LayerPoolingI,
+                            neurallinks[i].LayerPoolingF, neurallinks[i].LayerPoolingO,
+                            neurallinks[i].LayerPoolingOutput, neurallinks[i].NeuralLinkModel.Neural_In.Number,
+                            neurallinks[i].NeuralLinkModel.Neural_Out.Number, 0);
+                        MathOperatorManager.GlobalInstance.LSTM_Weight_Deriv_Sup(input_batch, wordLT.Table, neurallinks[i].reWeightDeriv,
+                            neurallinks[i].LayerPoolingA, neurallinks[i].LayerPoolingI,
+                            neurallinks[i].LayerPoolingF, neurallinks[i].LayerPoolingO,
+                            neurallinks[i].LayerPoolingOutput, neurallinks[i].NeuralLinkModel.Neural_In.Number,
+                            neurallinks[i].NeuralLinkModel.Neural_Out.Number, 1);
+                        MathOperatorManager.GlobalInstance.LSTM_Bias_Deriv_Sup(input_batch, neurallinks[i].BiasDeriv, neurallinks[i].LayerPoolingA, neurallinks[i].LayerPoolingI,
+                            neurallinks[i].LayerPoolingF, neurallinks[i].LayerPoolingO, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
                     }
                     else // must be multi-convolutional, composite layer cannot be the first layer
                     {
@@ -1851,6 +2206,11 @@ namespace DSMlib
             {
                     MathOperatorManager.GlobalInstance.MultiConv_Compute_WVDERIV(neurallayers[1].ErrorDeriv, neurallinks[0].LayerMaxPooling_Index, neurallinks[0].NeuralLinkModel.weight, batchsize,
                                 neurallayers[1].Number, wordLT.InputDeriv, neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.winsizes, neurallinks[0].NeuralLinkModel.fmsizes);
+            }
+            else if (neurallinks[0].NeuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                    MathOperatorManager.GlobalInstance.LSTM_Compute_WVDeriv(input_batch.elementSize, neurallinks[0].NeuralLinkModel.weight, wordLT.InputDeriv, neurallinks[0].LayerPoolingA,
+                        neurallinks[0].LayerPoolingI, neurallinks[0].LayerPoolingF, neurallinks[0].LayerPoolingO, neurallinks[0].NeuralLinkModel.Neural_In.Number, neurallinks[0].NeuralLinkModel.Neural_Out.Number);
             }
             else // convolution
             {
@@ -1890,9 +2250,10 @@ namespace DSMlib
             /// First, update weights and bias
             /// step 1, compute the weight updates, taking momentum and learning rates into consideration
             /// Wei_Update = momentum * Wei_Update + learn_rate * grad.
-            int row, col;
+            int row = 0, col = 0, rerow = 0, recol = 0;
             for (int i = 0; i < neurallinks.Count; i++)
             {
+                int biassize = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
                 if (neurallinks[i].NeuralLinkModel.Nt == N_Type.Composite_Full)
                 {
                     row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
@@ -1903,6 +2264,14 @@ namespace DSMlib
                     // treat feature dimensin as num of rows
                     row = neurallinks[i].NeuralLinkModel.Neural_In.Number;
                     col = neurallinks[i].NeuralLinkModel.ma_sizes[neurallinks[i].NeuralLinkModel.ma_sizes.Length - 1] / row;
+                }
+                else if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                {
+                    row = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    col = neurallinks[i].NeuralLinkModel.Neural_In.Number * 4;
+                    rerow = neurallinks[i].NeuralLinkModel.Neural_Out.Number;
+                    recol = neurallinks[i].NeuralLinkModel.Neural_Out.Number * 2;
+                    biassize = neurallinks[i].NeuralLinkModel.Neural_Out.Number * 4;
                 }
                 else
                 {
@@ -1920,14 +2289,25 @@ namespace DSMlib
 
                     // update the model: Weight = Weight += Wei_Update
                     MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightUpdate, col, row);
+
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                    {
+                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].reWeightUpdate, recol, rerow, momentum);
+                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].reWeightUpdate, neurallinks[i].reWeightDeriv, recol, rerow, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightUpdate, recol, rerow);
+                    }
                 }
                 else if (ParameterSetting.updateScheme == 0)
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, col, row, learning_rate);
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightDeriv, recol, rerow, learning_rate);
                 }
                 else // AdaGrad
                 {
                     MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.weight, neurallinks[i].WeightDeriv, neurallinks[i].WeightAdaGrad, col, row, learning_rate, ParameterSetting.DSSMEpsilon);
+                    if (neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.recur_weight, neurallinks[i].reWeightDeriv, neurallinks[i].reWeightAdaGrad, recol, rerow, learning_rate, ParameterSetting.DSSMEpsilon);
                 }
 
                 if (ParameterSetting.UpdateBias)
@@ -1935,20 +2315,20 @@ namespace DSMlib
                     if (ParameterSetting.updateScheme == 1)
                     {
                         // add the momentum
-                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, momentum);
+                        MathOperatorManager.GlobalInstance.Scale_Matrix(neurallinks[i].BiasUpdate, 1, biassize, momentum);
 
                         // dnn_neurallinks[i].Weight
-                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Add(neurallinks[i].BiasUpdate, neurallinks[i].BiasDeriv, 1, biassize, learning_rate);
                         // upate the model
-                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number);
+                        MathOperatorManager.GlobalInstance.Matrix_Add_REAL(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasUpdate, 1, biassize);
                     }
                     else if (ParameterSetting.updateScheme == 0)
                     {
-                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate);
+                        MathOperatorManager.GlobalInstance.Matrix_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, 1, biassize, learning_rate);
                     }
                     else // AdaGrad
                     {
-                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, neurallinks[i].NeuralLinkModel.Neural_Out.Number, learning_rate, ParameterSetting.DSSMEpsilon);
+                        MathOperatorManager.GlobalInstance.Matrix_Ada_Grad_Decent(neurallinks[i].NeuralLinkModel.bias, neurallinks[i].BiasDeriv, neurallinks[i].BiasAdaGrad, 1, biassize, learning_rate, ParameterSetting.DSSMEpsilon);
                     }
                 }
             }
@@ -2176,9 +2556,9 @@ namespace DSMlib
             LayerModel = layerModel;
             if (isValueNeeded)
             {
-                output = new CudaPieceFloat(maxBatchsize * Number, isLast, true);
+                output = new CudaPieceFloat(maxBatchsize * Number, isLast || ParameterSetting.DEBUG, true);
                 if (!isForwardOnly)
-                    errorDeriv = new CudaPieceFloat(maxBatchsize * Number, isLast, true);
+                    errorDeriv = new CudaPieceFloat(maxBatchsize * Number, isLast || ParameterSetting.DEBUG, true);
             }
         }
         /// <summary>
@@ -2251,12 +2631,54 @@ namespace DSMlib
             get { return layerMaxPooling_Index; }
         }
 
+        // for LSTM exclusively, storing internal state c (forward) or derivative of c (backward)
+        CudaPieceFloat layerPoolingInternalState = null;
+        public CudaPieceFloat LayerPoolingInternalState
+        {
+            get { return layerPoolingInternalState; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal input a, a =  tanh(W_a *x + U_a * h + b_a)
+        CudaPieceFloat layerPoolingA = null;
+        public CudaPieceFloat LayerPoolingA
+        {
+            get { return layerPoolingA; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal input gates
+        CudaPieceFloat layerPoolingI = null;
+        public CudaPieceFloat LayerPoolingI
+        {
+            get { return layerPoolingI; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal forget gates
+        CudaPieceFloat layerPoolingF = null;
+        public CudaPieceFloat LayerPoolingF
+        {
+            get { return layerPoolingF; }
+        }
+
+        // for LSTM exclusively, storing activations(forward)/derivatives(backward) of internal output gates
+        CudaPieceFloat layerPoolingO = null;
+        public CudaPieceFloat LayerPoolingO
+        {
+            get { return layerPoolingO; }
+        }
+
         CudaPieceFloat weightDeriv = null;
 
         public CudaPieceFloat WeightDeriv
         {
             get { return weightDeriv; }
         }
+
+        CudaPieceFloat reweightDeriv = null;
+        public CudaPieceFloat reWeightDeriv
+        {
+            get { return reweightDeriv; }
+        }
+
         CudaPieceFloat biasDeriv = null;
 
         public CudaPieceFloat BiasDeriv
@@ -2294,6 +2716,13 @@ namespace DSMlib
         {
             get { return weightUpdate; }
         }
+
+        CudaPieceFloat reweightUpdate = null;
+        public CudaPieceFloat reWeightUpdate
+        {
+            get { return reweightUpdate; }
+        }
+
         CudaPieceFloat biasUpdate = null;
 
         public CudaPieceFloat BiasUpdate
@@ -2308,6 +2737,14 @@ namespace DSMlib
         {
             get { return weightAdaGrad; }
         }
+
+        CudaPieceFloat reweightAdaGrad = null;
+
+        public CudaPieceFloat reWeightAdaGrad
+        {
+            get { return reweightAdaGrad; }
+        }
+
         CudaPieceFloat biasAdaGrad = null;
 
         public CudaPieceFloat BiasAdaGrad
@@ -2319,14 +2756,25 @@ namespace DSMlib
         {
             neuralLinkModel = neuralLink;
 
-            if (neuralLinkModel.Nt == N_Type.Convolution_layer || neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
+            if (neuralLinkModel.Nt == N_Type.Convolution_layer || neuralLinkModel.Nt == N_Type.MultiWidthConv_layer || neuralLinkModel.Nt == N_Type.bLSTM)
             {
                 // **now has the same shape as in single convolution, but some cells are invalid** for multi-window case, we still allocate the same size of space, but pooling output stores three matrices, each of size (seg_size - batchsize*(win_size-1))* fm_size
-                layerPoolingOutput = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, false, true);
-                layerMaxPooling_Index = new CudaPieceInt(maxBatchsize * neuralLinkModel.Neural_Out.Number, false, true);
+                layerPoolingOutput = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                layerMaxPooling_Index = new CudaPieceInt(maxBatchsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+
+                if (neuralLinkModel.Nt == N_Type.bLSTM)
+                {
+                    layerPoolingInternalState = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                    layerPoolingA = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                    layerPoolingI = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                    layerPoolingF = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                    layerPoolingO = new CudaPieceFloat(maxSegsize * neuralLinkModel.Neural_Out.Number, ParameterSetting.DEBUG, true);
+                }
             }
 
             int totalweightsize = 0;
+            int totalreweightsize = 0;
+            int totalbiassize = neuralLinkModel.Neural_Out.Number;
             if (neuralLinkModel.Nt == N_Type.MultiWidthConv_layer)
             {
                 for (int i = 0; i < neuralLinkModel.wnd_sizes.Length; i++)
@@ -2336,10 +2784,17 @@ namespace DSMlib
             {
                 totalweightsize = neuralLinkModel.Neural_Out.Number * (neuralLinkModel.Neural_In.Number + neuralLinkModel.Extra_Input.Number);
                 // Create space for composite outputs and their derivatives
-                composite_output = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * maxBatchsize, false, true);
+                composite_output = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * maxBatchsize, ParameterSetting.DEBUG, true);
                 if (!isForwardOnly)
-                    composite_error = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * maxBatchsize, false, true);
+                    composite_error = new CudaPieceFloat((neuralLinkModel.Neural_In.Number * neuralLinkModel.N_Winsize + neuralLinkModel.Extra_Input.Number) * maxBatchsize, ParameterSetting.DEBUG, true);
               
+            }
+            else if (neuralLinkModel.Nt == N_Type.bLSTM)
+            {
+                // calculate the size of weight and recurrent weight
+                totalweightsize = neuralLinkModel.Neural_In.Number * (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
+                totalreweightsize = (neuralLinkModel.Neural_Out.Number / 2) * (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
+                totalbiassize = (neuralLinkModel.Neural_Out.Number / 2) * 4 * 2;
             }
             else
                 totalweightsize = neuralLinkModel.Neural_In.Number * neuralLinkModel.Neural_Out.Number * neuralLinkModel.N_Winsize;
@@ -2347,17 +2802,23 @@ namespace DSMlib
             if (!isForwardOnly)
             {
                 weightDeriv = new CudaPieceFloat(totalweightsize, ParameterSetting.CheckGrad ? true : false, true);
-                biasDeriv = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, ParameterSetting.CheckGrad ? true : false, true);
+                biasDeriv = new CudaPieceFloat(totalbiassize, ParameterSetting.CheckGrad ? true : false, true);
+                if (neuralLinkModel.Nt == N_Type.bLSTM)
+                    reweightDeriv = new CudaPieceFloat(totalreweightsize, ParameterSetting.CheckGrad ? true : false, true);
 
                 if (ParameterSetting.updateScheme == 1)
                 {
                     weightUpdate = new CudaPieceFloat(totalweightsize, false, true);
-                    biasUpdate = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true);
+                    biasUpdate = new CudaPieceFloat(totalbiassize, false, true);
+                    if (neuralLinkModel.Nt == N_Type.bLSTM)
+                        reweightUpdate = new CudaPieceFloat(totalreweightsize, false, true);
                 }
                 else if (ParameterSetting.updateScheme == 2)
                 {
                     weightAdaGrad = new CudaPieceFloat(totalweightsize, false, true, ParameterSetting.initAdaGrad);
-                    biasAdaGrad = new CudaPieceFloat(neuralLinkModel.Neural_Out.Number, false, true, ParameterSetting.initAdaGrad);
+                    biasAdaGrad = new CudaPieceFloat(totalbiassize, false, true, ParameterSetting.initAdaGrad);
+                    if (neuralLinkModel.Nt == N_Type.bLSTM)
+                        reweightAdaGrad = new CudaPieceFloat(totalreweightsize, false, true, ParameterSetting.initAdaGrad);
                 }
             }
         }
@@ -2396,22 +2857,60 @@ namespace DSMlib
             {
                 weightDeriv.Dispose();
             }
+            if (reweightDeriv != null)
+            {
+                reweightDeriv.Dispose();
+            }
             if (biasDeriv != null)
             {
                 biasDeriv.Dispose();
             }
+            
             if (weightUpdate != null)
             {
                 weightUpdate.Dispose();
+            }
+            if (reweightUpdate != null)
+            {
+                reweightUpdate.Dispose();
             }
             if (biasUpdate != null)
             {
                 biasUpdate.Dispose();
             }
+
             if (weightAdaGrad != null)
                 weightAdaGrad.Dispose();
+            if (reweightAdaGrad != null)
+                reweightAdaGrad.Dispose();
             if (biasAdaGrad != null)
                 biasAdaGrad.Dispose();
+
+            if (layerPoolingInternalState != null)
+            {
+                layerPoolingInternalState.Dispose();
+                layerPoolingInternalState = null;
+            }
+            if (layerPoolingA != null)
+            {
+                layerPoolingA.Dispose();
+                layerPoolingA = null;
+            }
+            if (layerPoolingI != null)
+            {
+                layerPoolingI.Dispose();
+                layerPoolingI = null;
+            }
+            if (layerPoolingF != null)
+            {
+                layerPoolingF.Dispose();
+                layerPoolingF = null;
+            }
+            if (layerPoolingO != null)
+            {
+                layerPoolingO.Dispose();
+                layerPoolingO = null;
+            }
         }
 
         public void ZeroDeriv()
@@ -2420,6 +2919,8 @@ namespace DSMlib
                 weightDeriv.Zero();
             if (biasDeriv != null)
                 biasDeriv.Zero();
+            if (neuralLinkModel.Nt == N_Type.bLSTM)
+                reweightDeriv.Zero();
         }
     }
 }

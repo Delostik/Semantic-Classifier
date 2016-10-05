@@ -13,7 +13,7 @@ namespace DSMlib
         CudaPieceFloat dis = null;
         float[] objs = new float[batchsize];
         float[] newobjs = new float[batchsize];
-        public static float DELTA = 0.01f;
+        public static float DELTA = 0.005f;
         public static int batchsize = 1;
         public static int maxlenSentence = 10;
         public BatchSample_Input fakeData = new BatchSample_Input(batchsize, batchsize*maxlenSentence);
@@ -111,6 +111,10 @@ namespace DSMlib
         {
             MathOperatorManager.GlobalInstance.Calc_EuclideanDis(dnn_runData.neurallayers.Last().Outputs[0], dnn_runData.neurallayers.Last().Outputs[1],
                                     dnn_runData.neurallayers.Last().Outputs[2], dist, batchsize, dnn.OutputLayerSize, ParameterSetting.DSSMEpsilon);
+            //for (int i = 1; i < dnn_runData.neurallayers.Count; i++)
+            //    for (int j = 0; j < 3; j++)
+            //        dnn_runData.neurallayers[i].Outputs[j].CopyOutFromCuda();
+            
         }
 
         unsafe void calculate_outputderiv(CudaPieceFloat dist)
@@ -172,6 +176,8 @@ namespace DSMlib
             for (int i = 0; i < dnn_runData.neurallinks.Count; i++)
             {
                 dnn_runData.neurallinks[i].WeightDeriv.CopyOutFromCuda();
+                if (dnn_runData.neurallinks[i].NeuralLinkModel.Nt == N_Type.bLSTM)
+                    dnn_runData.neurallinks[i].reWeightDeriv.CopyOutFromCuda();
                 dnn_runData.neurallinks[i].BiasDeriv.CopyOutFromCuda();
             }
             dnn_runData.wordLT.TabUpdate.CopyOutFromCuda();
@@ -203,6 +209,31 @@ namespace DSMlib
                     //Program.Print("============================================");
                     weight[j] = weight[j] - CheckGradient.DELTA;
                     link.CopyIntoCuda();
+                }
+
+                if (link.Nt == N_Type.bLSTM)
+                {
+                    float[] reweight = link.Back_reWeight;
+                    for (int j = 0; j < reweight.Length; j++)
+                    {
+                        reweight[j] = reweight[j] + CheckGradient.DELTA;
+                        link.CopyIntoCuda();
+                        Forward_CalDistance(batches, dis);
+                        calObj(newobjs);
+                        Program.Print("============================================");
+                        Program.Print("Change recurrent weight " + j.ToString() + " at layer " + i.ToString() + ":");
+                        for (int k = 0; k < objs.Length; k++)
+                        {
+                            float deltaY = CheckGradient.DELTA * ldata.reWeightDeriv.MemPtr[j];
+                            string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                            if (objs[k] != 0)
+                                can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
+                            Program.Print(can);
+                        }
+                        //Program.Print("============================================");
+                        reweight[j] = reweight[j] - CheckGradient.DELTA;
+                        link.CopyIntoCuda();
+                    }
                 }
 
                 for (int j = 0; j < bias.Length; j++)
@@ -284,7 +315,7 @@ namespace DSMlib
         double[] outputy;
         float[] objs = new float[batchsize];
         float[] newobjs = new float[batchsize];
-        public static float DELTA = 0.01f;
+        public static float DELTA = 0.05f;
         public static int batchsize = 1;
         public static int maxlenSentence = 20;
         public LabeledBatchSample_Input fakeData = new LabeledBatchSample_Input(batchsize, batchsize * maxlenSentence);
@@ -501,6 +532,33 @@ namespace DSMlib
                     //Program.Print("============================================");
                     weight[j] = weight[j] - CheckGradient.DELTA;
                     link.CopyIntoCuda();
+                }
+
+                if (link.Nt == N_Type.bLSTM)
+                {
+                    float[] reweight = link.Back_reWeight;
+                    for (int j = 0; j < reweight.Length; j++)
+                    {
+                        reweight[j] = reweight[j] + CheckGradient.DELTA;
+                        link.CopyIntoCuda();
+                        dnn_runData.forward_activate(fakeData);
+                        dnn_runData.neurallayers.Last().Output.CopyOutFromCuda();
+                        calculate_outputy(dnn_runData.neurallayers.Last().Output.MemPtr, fakeData.batchsize);
+                        calObj(newobjs);
+                        Program.Print("============================================");
+                        Program.Print("Change recurrent weight " + j.ToString() + " at layer " + i.ToString() + ":");
+                        for (int k = 0; k < objs.Length; k++)
+                        {
+                            float deltaY = CheckGradient.DELTA * ldata.reWeightDeriv.MemPtr[j];
+                            string can = objs[k].ToString() + "\t" + deltaY.ToString() + "\t" + (objs[k] + deltaY).ToString() + "\t" + newobjs[k].ToString() + "\t";
+                            if (objs[k] != 0)
+                                can = can + (Math.Abs(newobjs[k] - objs[k] - deltaY) / (objs[k] + deltaY)).ToString();
+                            Program.Print(can);
+                        }
+                        //Program.Print("============================================");
+                        reweight[j] = reweight[j] - CheckGradient.DELTA;
+                        link.CopyIntoCuda();
+                    }
                 }
 
                 for (int j = 0; j < bias.Length; j++)

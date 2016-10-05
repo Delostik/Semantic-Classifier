@@ -131,6 +131,8 @@ void cuda_MultiConv_Matrix_Multiply_INTEX(uint32_t * Smp_Index, uint32_t batchsi
 
 void cuda_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension, int win_size);
 
+void cuda_LSTM_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension);
+
 void cuda_Multi_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension, int * win_sizes, int * fm_sizes);
 
 void cuda_Convolution_Matrix_Product_INTEX(float * deriv1, int * maxpooling_index1, float * deriv2, int * maxpooling_index2, float * deriv3, int * maxpooling_index3, float * wordLT,
@@ -203,3 +205,33 @@ void cuda_Sparse_Update_Lookup_Update_Sup(float * lookupt_update, int * Fea_ID, 
 
 
 void cuda_Init_Float_Array(float * target, float val, int size);
+
+
+void cuda_LSTM_Input_Batch_Product(uint32_t * Word_Index, uint32_t Word_SeqLen, float * wordLT,
+	float * weight, float * outputA, float * outputI, float * outputF, float * outputO, uint32_t Feature_dimension, uint32_t output_dimension);
+
+
+void cuda_LSTM_Sequence_Forward(int * Smp_Index, int batchsize,
+	float * reweight, float * bias, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension);
+
+void cuda_LSTM_Sequence_Backward(int * Smp_Index, int batchsize,
+	float * reweight, int * maxpooling_index, float * derivup, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension);
+
+void cuda_LSTM_Weight_Deriv(uint32_t * Smp_Index1, uint32_t * Smp_Index2, uint32_t * Smp_Index3,
+	uint32_t * Word_Index1, uint32_t * Word_Index2, uint32_t * Word_Index3, uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * wordLT, float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, float * h1, float * h2, float * h3,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight);
+
+void cuda_LSTM_Weight_Deriv_Sup(uint32_t * Smp_Index1, uint32_t * Word_Index1, uint32_t Word_SeqLen1,
+	float * wordLT, float * grad, float * outA1, float * outI1, float * outF1, float * outO1, float * h1,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight);
+
+void cuda_LSTM_Bias_Deriv(uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, uint32_t output_dimension);
+
+void cuda_LSTM_Bias_Deriv_Sup(uint32_t Word_SeqLen1, float * grad, float * outA1, float * outI1,
+	float * outF1, float * outO1, uint32_t output_dimension);
+
+void cuda_LSTM_Compute_WVDeriv(uint32_t Word_SeqLen, float * weight, float * grad, float * outA, float * outI, float * outF, float * outO, uint32_t fea_dim, uint32_t output_dim);

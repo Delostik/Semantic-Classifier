@@ -14,7 +14,7 @@ LEARNINGRATE	0.05
 LAYER_DIM	600,300,300
 LAYERWEIGHT_SIGMA	0.1,0.1,0.1
 ACTIVATION	1,1,1	#0: Linear   1: Tanh    2: rectified 
-ARCH	2,0,3	#0: Fully Connected	1: Convolutional	2: Multi-width Convolutional layer	3: Composite
+ARCH	4,0,3	#0: Fully Connected	1: Convolutional	2: Multi-width Convolutional layer	3: Composite	4: bLSTM
 ARCH_WNDSIZE	3,1,1
 ARCH_WNDSIZES	1,2,3
 ARCH_FMSIZES	200,200,200
@@ -29,7 +29,7 @@ ACCEPT_RANGE	1.0
 MATH_LIB	GPU
 UPDATE_BIAS	1
 WORDLT_INIT	..\data\wvinit.bin
-CHECK_GRADIENT	0
+CHECK_GRADIENT	1
 UPDATE_SCHEME	0	#0: standard gradient descent	1: with momentum	2: AdaGrad
 DEBUG	0
 SUPMODEL_INIT	XXX

@@ -376,6 +376,11 @@ DLLEXP void __stdcall Max_Pooling(float * pooling_feas, int * Smp_Index, int bat
 	cuda_Max_Pooling(pooling_feas, Smp_Index, batchsize, output, maxpooling_index, output_dimension, win_size);
 }
 
+DLLEXP void __stdcall LSTM_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension)
+{
+	cuda_LSTM_Max_Pooling(pooling_feas, Smp_Index, batchsize, output, maxpooling_index, output_dimension);
+}
+
 DLLEXP void __stdcall Multi_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension, int * win_sizes, int * fm_sizes)
 {
 	cuda_Multi_Max_Pooling(pooling_feas, Smp_Index, batchsize, output, maxpooling_index, output_dimension, win_sizes, fm_sizes);
@@ -572,6 +577,59 @@ DLLEXP void __stdcall Sparse_Update_Lookup_Ada_Sup(float * lookupt, int * Fea_ID
 DLLEXP void __stdcall Sparse_Update_Lookup_Update_Sup(float * lookupt_update, int * Fea_ID, int * Fea_Idx, int * Seq, float * ltDeriv, int IDnum, int Feature_Dimension, float lr)
 {
 	cuda_Sparse_Update_Lookup_Update_Sup(lookupt_update, Fea_ID, Fea_Idx, Seq, ltDeriv, IDnum, Feature_Dimension, lr);
+}
+
+DLLEXP void __stdcall LSTM_Input_Batch_Product(uint32_t * Word_Index, uint32_t Word_SeqLen, float * wordLT,
+	float * weight, float * outputA, float * outputI, float * outputF, float * outputO, uint32_t Feature_dimension, uint32_t output_dimension)
+{
+	cuda_LSTM_Input_Batch_Product(Word_Index, Word_SeqLen, wordLT, weight, outputA, outputI, outputF, outputO, Feature_dimension, output_dimension);
+}
+
+DLLEXP void __stdcall LSTM_Sequence_Forward(int * Smp_Index, int batchsize,
+	float * reweight, float * bias, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension)
+{
+	cuda_LSTM_Sequence_Forward(Smp_Index, batchsize, reweight, bias, outputA, outputI, outputF, outputO, outputC, output, output_dimension);
+}
+
+DLLEXP void __stdcall LSTM_Sequence_Backward(int * Smp_Index, int batchsize,
+	float * reweight, int * maxpooling_index, float * derivup, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension)
+{
+	cuda_LSTM_Sequence_Backward(Smp_Index, batchsize, reweight, maxpooling_index, derivup, outputA, outputI, outputF, outputO, outputC, output, output_dimension);
+}
+
+DLLEXP void __stdcall LSTM_Weight_Deriv(uint32_t * Smp_Index1, uint32_t * Smp_Index2, uint32_t * Smp_Index3,
+	uint32_t * Word_Index1, uint32_t * Word_Index2, uint32_t * Word_Index3, uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * wordLT, float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, float * h1, float * h2, float * h3,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight)
+{
+	cuda_LSTM_Weight_Deriv(Smp_Index1, Smp_Index2, Smp_Index3, Word_Index1, Word_Index2, Word_Index3, Word_SeqLen1, Word_SeqLen2, Word_SeqLen3, 
+		wordLT, grad, outA1, outA2, outA3, outI1, outI2, outI3, outF1, outF2, outF3, outO1, outO2, outO3, h1, h2, h3, fea_dimension, output_dimension, b_reweight);
+}
+
+DLLEXP void __stdcall LSTM_Weight_Deriv_Sup(uint32_t * Smp_Index1, uint32_t * Word_Index1, uint32_t Word_SeqLen1,
+	float * wordLT, float * grad, float * outA1, float * outI1, float * outF1, float * outO1, float * h1,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight)
+{
+	cuda_LSTM_Weight_Deriv_Sup(Smp_Index1, Word_Index1, Word_SeqLen1, wordLT, grad, outA1, outI1, outF1, outO1, h1, fea_dimension, output_dimension, b_reweight);
+}
+
+DLLEXP void __stdcall LSTM_Bias_Deriv(uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, uint32_t output_dimension)
+{
+	cuda_LSTM_Bias_Deriv(Word_SeqLen1, Word_SeqLen2, Word_SeqLen3, grad, outA1, outA2, outA3, outI1, outI2, outI3, outF1, outF2, outF3, outO1, outO2, outO3, output_dimension);
+}
+
+DLLEXP void __stdcall LSTM_Bias_Deriv_Sup(uint32_t Word_SeqLen1, float * grad, float * outA1, float * outI1,
+	float * outF1, float * outO1, uint32_t output_dimension)
+{
+	cuda_LSTM_Bias_Deriv_Sup(Word_SeqLen1, grad, outA1, outI1, outF1, outO1, output_dimension);
+}
+
+DLLEXP void __stdcall LSTM_Compute_WVDeriv(uint32_t Word_SeqLen, float * weight, float * grad, float * outA, float * outI, float * outF, float * outO, uint32_t fea_dim, uint32_t output_dim)
+{
+	cuda_LSTM_Compute_WVDeriv(Word_SeqLen, weight, grad, outA, outI, outF, outO, fea_dim, output_dim);
 }
 
 /************************************************************/

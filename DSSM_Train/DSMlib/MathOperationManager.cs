@@ -10,12 +10,33 @@ namespace DSMlib
     {
         /*----------  Mainly used in forward activation, computing linear transformations  --------------*/
         //void SEQ_Sparse_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat output, int inputDimension, int outputDimension, int winSize);
-        void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize) ;
+        void Convolution_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, int winSize);
         void MultiConv_Matrix_Multiply_INTEX(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingOutput, LookupTab wtab, int inputDimension, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes);
         void Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, int winSize);
+        void LSTM_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension);
         void Multi_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes);
         void Matrix_Multipy(CudaPieceFloat input, CudaPieceFloat weight, CudaPieceFloat output, int batchsize, int inputDimension, int outputDimension, int inverse);
         
+        /*----------  Operations for LSTM computation  --------------*/
+        void LSTM_Input_Batch_Product(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, LookupTab wtab, int inputDimension, int outputDimension);
+        void LSTM_Sequence_Forward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceFloat bias, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension);
+        void LSTM_Sequence_Backward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceInt maxpooling_index, CudaPieceFloat derivup, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension);
+        void LSTM_Weight_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, LookupTab wordLT, CudaPieceFloat grad, 
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3, 
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3, 
+            CudaPieceFloat h1, CudaPieceFloat h2, CudaPieceFloat h3, int fea_dim, int output_dim, int b_reweight);
+        void LSTM_Weight_Deriv_Sup(BatchSample_Input data, LookupTab wordLT, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, CudaPieceFloat h1, int fea_dim, int output_dim, int b_reweight);
+        void LSTM_Bias_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, CudaPieceFloat grad,
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3,
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3,
+            int output_dim);
+        void LSTM_Bias_Deriv_Sup(BatchSample_Input data, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, int output_dim);
+        void LSTM_Compute_WVDeriv(int Word_SeqLen, CudaPieceFloat weight, CudaPieceFloat grad,
+            CudaPieceFloat outA, CudaPieceFloat outI, CudaPieceFloat outF, CudaPieceFloat outO, int fea_dim, int output_dim);
+
+
         /*----------  Mainly used in forward activation, adding non-linear activations  --------------*/
         void Matrix_Add_Tanh(CudaPieceFloat output, CudaPieceFloat bias, int batchsize, int outputDimension);
         void Matrix_Add_Vector(CudaPieceFloat output, CudaPieceFloat bias, int batchsize, int outputDimension);
@@ -187,6 +208,12 @@ namespace DSMlib
 
         }
 
+        public void LSTM_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension)
+        {
+            Cudalib.LSTM_Max_Pooling(layerPoolingOutput.CudaPtr, data.Sample_Idx, data.batchsize, output.CudaPtr, layerMaxPooling_Index.CudaPtr, outputDimension);
+
+        }
+
         public void Multi_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes)
         {
             Cudalib.Multi_Max_Pooling(layerPoolingOutput.CudaPtr, data.Sample_Idx, data.batchsize, output.CudaPtr, layerMaxPooling_Index.CudaPtr, outputDimension, wndSizes.CudaPtr, fmSizes.CudaPtr);
@@ -203,6 +230,63 @@ namespace DSMlib
             {
                 Cudalib.Matrix_Multipy(input.CudaPtr, weight.CudaPtr, output.CudaPtr, batchsize, inputDimension, outputDimension, inverse);
             }
+        }
+
+
+        public void LSTM_Input_Batch_Product(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, LookupTab wtab, int inputDimension, int outputDimension)
+        {
+            Cudalib.LSTM_Input_Batch_Product(data.Word_Idx, data.elementSize, wtab.LookupTable, weight.CudaPtr, layerPoolingA.CudaPtr, layerPoolingI.CudaPtr, layerPoolingF.CudaPtr, layerPoolingO.CudaPtr, inputDimension, outputDimension);
+        }
+
+        public void LSTM_Sequence_Forward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceFloat bias, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension)
+        {
+            Cudalib.LSTM_Sequence_Forward(data.Sample_Idx, data.batchsize, reweight.CudaPtr, bias.CudaPtr, layerPoolingA.CudaPtr, layerPoolingI.CudaPtr, layerPoolingF.CudaPtr, layerPoolingO.CudaPtr, layerPoolingIternalState.CudaPtr, layerPoolingOutput.CudaPtr, outputDimension);
+        }
+
+        public void LSTM_Sequence_Backward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceInt maxpooling_index, CudaPieceFloat derivup, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension)
+        {
+            Cudalib.LSTM_Sequence_Backward(data.Sample_Idx, data.batchsize, reweight.CudaPtr, maxpooling_index.CudaPtr, derivup.CudaPtr, layerPoolingA.CudaPtr, layerPoolingI.CudaPtr, layerPoolingF.CudaPtr, layerPoolingO.CudaPtr, layerPoolingIternalState.CudaPtr, layerPoolingOutput.CudaPtr, outputDimension);
+        }
+
+        public void LSTM_Weight_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, LookupTab wordLT, CudaPieceFloat grad,
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3,
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3,
+            CudaPieceFloat h1, CudaPieceFloat h2, CudaPieceFloat h3, int fea_dim, int output_dim, int b_reweight)
+        {
+            Cudalib.LSTM_Weight_Deriv(data.Sample_Idx, data2.Sample_Idx, data3.Sample_Idx, data.Word_Idx, data2.Word_Idx, data3.Word_Idx, data.elementSize,
+                data2.elementSize, data3.elementSize, wordLT.LookupTable, grad.CudaPtr, outA1.CudaPtr, outA2.CudaPtr, outA3.CudaPtr,
+                outI1.CudaPtr, outI2.CudaPtr, outI3.CudaPtr, outF1.CudaPtr, outF2.CudaPtr, outF3.CudaPtr, outO1.CudaPtr, outO2.CudaPtr,
+                outO3.CudaPtr, h1.CudaPtr, h2.CudaPtr, h3.CudaPtr, fea_dim, output_dim, b_reweight);
+        }
+
+        public void LSTM_Weight_Deriv_Sup(BatchSample_Input data, LookupTab wordLT, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, CudaPieceFloat h1, int fea_dim, int output_dim, int b_reweight)
+        {
+            Cudalib.LSTM_Weight_Deriv_Sup(data.Sample_Idx, data.Word_Idx, data.elementSize, wordLT.LookupTable, grad.CudaPtr, outA1.CudaPtr,
+                outI1.CudaPtr, outF1.CudaPtr, outO1.CudaPtr, h1.CudaPtr, fea_dim, output_dim, b_reweight);
+        }
+            
+            
+        public void LSTM_Bias_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, CudaPieceFloat grad,
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3,
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3,
+            int output_dim)
+        {
+            Cudalib.LSTM_Bias_Deriv(data.elementSize, data2.elementSize, data3.elementSize, grad.CudaPtr, outA1.CudaPtr, outA2.CudaPtr, outA3.CudaPtr,
+                outI1.CudaPtr, outI2.CudaPtr, outI3.CudaPtr, outF1.CudaPtr, outF2.CudaPtr, outF3.CudaPtr, outO1.CudaPtr, outO2.CudaPtr,
+                outO3.CudaPtr, output_dim);
+        }
+
+        public void LSTM_Bias_Deriv_Sup(BatchSample_Input data, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, int output_dim)
+        {
+            Cudalib.LSTM_Bias_Deriv_Sup(data.elementSize, grad.CudaPtr, outA1.CudaPtr, outI1.CudaPtr, outF1.CudaPtr, outO1.CudaPtr, output_dim);
+        }
+
+        public void LSTM_Compute_WVDeriv(int Word_SeqLen, CudaPieceFloat weight, CudaPieceFloat grad,
+            CudaPieceFloat outA, CudaPieceFloat outI, CudaPieceFloat outF, CudaPieceFloat outO, int fea_dim, int output_dim)
+        {
+            Cudalib.LSTM_Compute_WVDeriv(Word_SeqLen, weight.CudaPtr, grad.CudaPtr, outA.CudaPtr, outI.CudaPtr, outF.CudaPtr, outO.CudaPtr, fea_dim, output_dim);
         }
 
 
@@ -615,6 +699,12 @@ namespace DSMlib
             //BasicMathlib.Max_Pooling(layerPoolingOutput.MemPtr, data.Sample_Idx_Mem, data.batchsize, output.MemPtr, layerMaxPooling_Index.MemPtr, outputDimension);
         }
 
+        public void LSTM_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension)
+        {
+            // not implemented
+            //BasicMathlib.Max_Pooling(layerPoolingOutput.MemPtr, data.Sample_Idx_Mem, data.batchsize, output.MemPtr, layerMaxPooling_Index.MemPtr, outputDimension);
+        }
+
         public void Multi_Max_Pooling(CudaPieceFloat layerPoolingOutput, BatchSample_Input data, CudaPieceFloat output, CudaPieceInt layerMaxPooling_Index, int outputDimension, CudaPieceInt wndSizes, CudaPieceInt fmSizes)
         {
             // not implemented
@@ -919,6 +1009,56 @@ namespace DSMlib
         }
 
         public void Sparse_Update_Lookup_Update_Sup(CudaPieceFloat tabUpdate, LookupTabRunDataSup tableD, int Feature_Dimension, float lr)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Input_Batch_Product(BatchSample_Input data, CudaPieceFloat weight, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, LookupTab wtab, int inputDimension, int outputDimension)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Sequence_Forward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceFloat bias, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Sequence_Backward(BatchSample_Input data, CudaPieceFloat reweight, CudaPieceInt maxpooling_index, CudaPieceFloat derivup, CudaPieceFloat layerPoolingA, CudaPieceFloat layerPoolingI, CudaPieceFloat layerPoolingF, CudaPieceFloat layerPoolingO, CudaPieceFloat layerPoolingIternalState, CudaPieceFloat layerPoolingOutput, int outputDimension)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Weight_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, LookupTab wordLT, CudaPieceFloat grad,
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3,
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3,
+            CudaPieceFloat h1, CudaPieceFloat h2, CudaPieceFloat h3, int fea_dim, int output_dim, int b_reweight)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Weight_Deriv_Sup(BatchSample_Input data, LookupTab wordLT, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, CudaPieceFloat h1, int fea_dim, int output_dim, int b_reweight)
+        {
+            // not implemented
+        }
+
+
+        public void LSTM_Bias_Deriv(BatchSample_Input data, BatchSample_Input data2, BatchSample_Input data3, CudaPieceFloat grad,
+            CudaPieceFloat outA1, CudaPieceFloat outA2, CudaPieceFloat outA3, CudaPieceFloat outI1, CudaPieceFloat outI2, CudaPieceFloat outI3,
+            CudaPieceFloat outF1, CudaPieceFloat outF2, CudaPieceFloat outF3, CudaPieceFloat outO1, CudaPieceFloat outO2, CudaPieceFloat outO3,
+            int output_dim)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Bias_Deriv_Sup(BatchSample_Input data, CudaPieceFloat grad, CudaPieceFloat outA1, CudaPieceFloat outI1,
+            CudaPieceFloat outF1, CudaPieceFloat outO1, int output_dim)
+        {
+            // not implemented
+        }
+
+        public void LSTM_Compute_WVDeriv(int Word_SeqLen, CudaPieceFloat weight, CudaPieceFloat grad,
+            CudaPieceFloat outA, CudaPieceFloat outI, CudaPieceFloat outF, CudaPieceFloat outO, int fea_dim, int output_dim)
         {
             // not implemented
         }

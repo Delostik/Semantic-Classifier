@@ -62,7 +62,7 @@ namespace DSMlib
         {
             try
             {
-                ParameterSetting.LoadArgs("config.txt");
+                ParameterSetting.LoadArgs("D:\\MyStudy\\comment_summarization\\code\\ourproj-git\\Semantic-Classifier\\DSSM_Train\\DSMlib\\bin\\x64\\Release\\config.txt");
 
                 if (args != null && args.Length > 0)
                     ParameterSetting.LoadArgs(args[0]);

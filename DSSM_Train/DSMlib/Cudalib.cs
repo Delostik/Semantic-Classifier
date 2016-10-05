@@ -198,6 +198,9 @@ namespace DSMlib
         public unsafe static extern void Max_Pooling(IntPtr pooling_feas, IntPtr Smp_Index, int batchsize, IntPtr output, IntPtr maxpooling_index, int output_dimension, int winSize);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Max_Pooling(IntPtr pooling_feas, IntPtr Smp_Index, int batchsize, IntPtr output, IntPtr maxpooling_index, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Multi_Max_Pooling(IntPtr pooling_feas, IntPtr Smp_Index, int batchsize, IntPtr output, IntPtr maxpooling_index, int output_dimension, IntPtr win_sizes, IntPtr fm_sizes);
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
@@ -286,6 +289,37 @@ namespace DSMlib
 
         [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
         public unsafe static extern void Sparse_Update_Lookup_Update_Sup(IntPtr lookupt_update, IntPtr Fea_ID, IntPtr Fea_Idx, IntPtr Seq, IntPtr ltDeriv, int IDnum, int Feature_Dimension, float lr);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Input_Batch_Product(IntPtr Word_Index, int Word_SeqLen, IntPtr wordLT, IntPtr weight, IntPtr outputA, IntPtr outputI, IntPtr outputF, IntPtr outputO, int Feature_Dimension, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Sequence_Forward(IntPtr Smp_Index, int batchsize, IntPtr reweight, IntPtr bias, IntPtr outputA, IntPtr outputI, IntPtr outputF, IntPtr outputO, IntPtr outputC, IntPtr output, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Sequence_Backward(IntPtr Smp_Index, int batchsize, IntPtr reweight, IntPtr maxpooling_index, IntPtr derivup, IntPtr outputA, IntPtr outputI, IntPtr outputF, IntPtr outputO, IntPtr outputC, IntPtr output, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Weight_Deriv(IntPtr Smp_Index1, IntPtr Smp_Index2, IntPtr Smp_Index3, IntPtr Word_Index1, IntPtr Word_Index2, IntPtr Word_Index3, int Word_SeqLen1, int Word_SeqLen2, int Word_SeqLen3,
+            IntPtr wordLT, IntPtr grad, IntPtr outA1, IntPtr outA2, IntPtr outA3, IntPtr outI1, IntPtr outI2, IntPtr outI3,
+            IntPtr outF1, IntPtr outF2, IntPtr outF3, IntPtr outO1, IntPtr outO2, IntPtr outO3, IntPtr h1, IntPtr h2, IntPtr h3,
+            int fea_dimension, int output_dimension, int b_reweight);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Weight_Deriv_Sup(IntPtr Smp_Index1, IntPtr Word_Index1, int Word_SeqLen1, IntPtr wordLT, IntPtr grad, IntPtr outA1, IntPtr outI1,
+            IntPtr outF1, IntPtr outO1, IntPtr h1, int fea_dimension, int output_dimension, int b_reweight);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Bias_Deriv(int Word_SeqLen1, int Word_SeqLen2, int Word_SeqLen3,
+            IntPtr grad, IntPtr outA1, IntPtr outA2, IntPtr outA3, IntPtr outI1, IntPtr outI2, IntPtr outI3,
+            IntPtr outF1, IntPtr outF2, IntPtr outF3, IntPtr outO1, IntPtr outO2, IntPtr outO3, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Bias_Deriv_Sup(int Word_SeqLen1, IntPtr grad, IntPtr outA1, IntPtr outI1,
+            IntPtr outF1, IntPtr outO1, int output_dimension);
+
+        [DllImport("Cudalib", CallingConvention = CallingConvention.StdCall)]
+        public unsafe static extern void LSTM_Compute_WVDeriv(int Word_SeqLen, IntPtr weight, IntPtr grad, IntPtr outA, IntPtr outI, IntPtr outF, IntPtr outO, int fea_dim, int output_dim);
 
     }
 }

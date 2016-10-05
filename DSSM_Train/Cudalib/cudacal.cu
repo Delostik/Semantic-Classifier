@@ -1,5 +1,8 @@
 #include "stdafx.h"
-
+#ifndef __CUDACC__  
+#define __CUDACC__
+#endif
+#include "device_functions.h"
 #include <iostream> 
 #include <vector> 
 #include <cuda_runtime.h> 
@@ -1514,6 +1517,41 @@ void cuda_Multi_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize
 }
 
 
+__global__ void cuda_lstm_max_pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	if (idy < batchsize && idx < output_dimension)
+	{
+		//output[idy * output_dimension + idx] = 0;
+		uint32_t col_end = Smp_Index[idy] - 1;
+		uint32_t col_begin = 0;
+		if (idy > 0)
+		{
+			col_begin = Smp_Index[idy - 1];
+		}
+		float max_value = 0;
+		int max_index = -1;
+		for (uint32_t i = col_begin; i <= col_end; i++)
+		{
+			if (max_index == -1 || pooling_feas[i * output_dimension + idx] > max_value)
+			{
+				max_value = pooling_feas[i * output_dimension + idx];
+				max_index = i;
+			}
+		}
+		output[idy * output_dimension + idx] = max_value;
+		maxpooling_index[idy * output_dimension + idx] = max_index;
+	}
+}
+
+void cuda_LSTM_Max_Pooling(float * pooling_feas, int * Smp_Index, int batchsize, float * output, int * maxpooling_index, int output_dimension)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (batchsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	cuda_lstm_max_pooling<<<block_tail, thread_tail>>>(pooling_feas, Smp_Index, batchsize, output, maxpooling_index, output_dimension);
+}
+
 
 
 __global__ void cuda_seq_sparse_matrix_multiply_INTEX(uint32_t * Smp_Index, uint32_t batchsize, uint32_t * Seg_Index, uint32_t * Seg_Margin, float * Seg_Len, 
@@ -2619,4 +2657,739 @@ void cuda_Init_Float_Array(float * target, float val, int size)
 	//dim3 block_tail((batchsize + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, ( labelDim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
 
 	cuda_init_float_array<<< nBlockPerGrid, DEFAULT_THREAD_PER_BLOCK >>>(target, val, size);
+}
+
+
+__global__ void cuda_lstm_input_batch_product(uint32_t * Word_Index, uint32_t Word_SeqLen,
+	float * wordLT,
+	float * weight, float * outputA, float * outputI, float * outputF, float * outputO, uint32_t Feature_dimension, uint32_t output_dimension)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	if (idx < 4*output_dimension && idy < Word_SeqLen)
+	{
+		uint32_t wordIdx = Word_Index[idy];
+		uint32_t hdim = output_dimension / 2;
+		uint32_t matrixIdx = idx / hdim;
+		uint32_t inmatrixIdx = idx % hdim;
+		uint32_t startpos = matrixIdx * hdim * Feature_dimension;
+		float sum = 0;
+
+		for (uint32_t i = 0; i < Feature_dimension; i++)
+		{
+			sum += wordLT[wordIdx*Feature_dimension + i] * weight[startpos + i*hdim + inmatrixIdx];
+		}
+
+		if (matrixIdx < 2)
+			outputA[idy * output_dimension + (matrixIdx % 2) * hdim + inmatrixIdx] = sum;
+		else if (matrixIdx < 4)
+			outputI[idy * output_dimension + (matrixIdx % 2) * hdim + inmatrixIdx] = sum;
+		else if (matrixIdx < 6)
+			outputF[idy * output_dimension + (matrixIdx % 2) * hdim + inmatrixIdx] = sum;
+		else if (matrixIdx < 8)
+			outputO[idy * output_dimension + (matrixIdx % 2) * hdim + inmatrixIdx] = sum;
+	}
+}
+
+void cuda_LSTM_Input_Batch_Product(uint32_t * Word_Index, uint32_t Word_SeqLen, float * wordLT,
+	float * weight, float * outputA, float * outputI, float * outputF, float * outputO, uint32_t Feature_dimension, uint32_t output_dimension)
+{
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((4*output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (Word_SeqLen + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_input_batch_product<<<block_tail, thread_tail>>>(Word_Index, Word_SeqLen, wordLT, weight, outputA, outputI, outputF, outputO, Feature_dimension, output_dimension);
+}
+
+
+__global__ void cuda_lstm_sequence_forward(int * Smp_Index, int batchsize,
+	float * reweight, float * bias, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension, int blocksize)
+{
+	//uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	//uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = threadIdx.x;
+	uint32_t idy = blockIdx.y;
+	
+		
+	int wordEnd = Smp_Index[idy];
+	int wordBegin = 0;
+	if (idy > 0)
+		wordBegin = Smp_Index[idy - 1];
+	__shared__ float _h[300]; // to-do: hard-coded, should be configurable
+	float bias_a;
+	float bias_i;
+	float bias_f;
+	float bias_o;
+
+	float _c;
+	float h;
+
+	if (blockIdx.x == 0) // forward lstm cell
+	{
+		//load bias for forward LSTM
+		bias_a = bias[idx];
+		bias_i = bias[output_dimension + idx];
+		bias_f = bias[2 * output_dimension + idx];
+		bias_o = bias[3 * output_dimension + idx];
+		//__syncthreads(); // make sure all bias data be loaded before computation
+
+		for (int w = wordBegin; w < wordEnd; w++)
+		{
+			float a = outputA[output_dimension*w + idx];
+			float i = outputI[output_dimension*w + idx];
+			float f = outputF[output_dimension*w + idx];
+			float o = outputO[output_dimension*w + idx];
+
+			if (w > wordBegin)
+			{ 
+				for (int j = 0; j < blockDim.x; j++)
+				{
+					a += reweight[j*blockDim.x + idx] * _h[j];
+					i += reweight[2 * blocksize + j*blockDim.x + idx] * _h[j];
+					f += reweight[4 * blocksize + j*blockDim.x + idx] * _h[j];
+					o += reweight[6 * blocksize + j*blockDim.x + idx] * _h[j];
+				}
+			}
+			a += bias_a;
+			i += bias_i;
+			f += bias_f;
+			o += bias_o;
+			a = tanhf(a);
+			i = 1.0 / (1.0 + expf(-i));
+			f = 1.0 / (1.0 + expf(-f));
+			o = 1.0 / (1.0 + expf(-o));
+			if (w > wordBegin)
+				_c = i * a + f * _c;
+			else
+				_c = i * a;
+			h = o * tanhf(_c);
+			
+			__syncthreads(); // make sure all threads have read _h before overwrite it
+			_h[idx] = h;
+			__syncthreads(); // make sure all writes are done before any thread read it
+
+			outputC[w * output_dimension + idx] = _c;
+			outputA[w * output_dimension + idx] = a;
+			outputI[w * output_dimension + idx] = i;
+			outputF[w * output_dimension + idx] = f;
+			outputO[w * output_dimension + idx] = o;
+			output[w * output_dimension + idx] = h;
+		}
+	}
+	else
+	{
+		//load bias for reverse LSTM
+		uint32_t gidx = blockDim.x + idx;
+		bias_a = bias[gidx];
+		bias_i = bias[output_dimension + gidx];
+		bias_f = bias[2 * output_dimension + gidx];
+		bias_o = bias[3 * output_dimension + gidx];
+		//__syncthreads(); // make sure all bias data be loaded before computation
+
+		for (int w = wordEnd - 1; w >= wordBegin; w--)
+		{
+			float a = outputA[output_dimension*w + gidx];
+			float i = outputI[output_dimension*w + gidx];
+			float f = outputF[output_dimension*w + gidx];
+			float o = outputO[output_dimension*w + gidx];
+
+			if (w < wordEnd - 1)
+			{
+				for (int j = 0; j < blockDim.x; j++)
+				{
+					a += reweight[blocksize + j*blockDim.x + idx] * _h[j];
+					i += reweight[3 * blocksize + j*blockDim.x + idx] * _h[j];
+					f += reweight[5 * blocksize + j*blockDim.x + idx] * _h[j];
+					o += reweight[7 * blocksize + j*blockDim.x + idx] * _h[j];
+				}
+			}
+			a += bias_a;
+			i += bias_i;
+			f += bias_f;
+			o += bias_o;
+			a = tanhf(a);
+			i = 1.0 / (1.0 + expf(-i));
+			f = 1.0 / (1.0 + expf(-f));
+			o = 1.0 / (1.0 + expf(-o));
+			if (w < wordEnd - 1)
+				_c = i * a + f * _c;
+			else
+				_c = i * a;
+			h = o * tanhf(_c);
+
+			__syncthreads(); // make sure all threads have read _h before overwrite it
+			_h[idx] = h;
+			__syncthreads(); // make sure all writes are done before any thread read it
+
+			outputC[w * output_dimension + gidx] = _c;
+			outputA[w * output_dimension + gidx] = a;
+			outputI[w * output_dimension + gidx] = i;
+			outputF[w * output_dimension + gidx] = f;
+			outputO[w * output_dimension + gidx] = o;
+			output[w * output_dimension + gidx] = h;
+		}
+	}
+	
+}
+
+void cuda_LSTM_Sequence_Forward(int * Smp_Index, int batchsize,
+	float * reweight, float * bias, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension)
+{
+	uint32_t hdim = output_dimension / 2;
+	dim3 thread_tail(hdim, 1);
+	dim3 block_tail(2, batchsize);
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_sequence_forward<<<block_tail, thread_tail>>>(Smp_Index, batchsize, reweight, bias, outputA, outputI, outputF, outputO, outputC, output, output_dimension, hdim*hdim);
+}
+
+
+__global__ void cuda_lstm_sequence_backward(int * Smp_Index, int batchsize,
+	float * reweight, int * maxpooling_index, float * derivup, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension, int blocksize)
+{
+	//uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	//uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t idx = threadIdx.x;
+	uint32_t idy = blockIdx.y;
+
+
+	int wordEnd = Smp_Index[idy];
+	int wordBegin = 0;
+	if (idy > 0)
+		wordBegin = Smp_Index[idy - 1];
+
+	
+	__shared__ float derivA[300]; // to-do: hard-coded, should be configurable
+	__shared__ float derivI[300];
+	__shared__ float derivF[300];
+	__shared__ float derivO[300];
+
+	float _derivc, deriv_c;
+	float derivh;
+	float a, i, f, o, c_tanh;
+
+	if (blockIdx.x == 1) // reverse lstm cell backprop
+	{
+		int gidx = blockDim.x + idx;
+		int mpoolingIdx = maxpooling_index[output_dimension * idy + gidx];
+		for (int w = wordBegin; w < wordEnd; w++)
+		{
+			derivh = 0;
+			if (mpoolingIdx == w)
+				derivh += derivup[output_dimension * idy + gidx];
+
+			if (w > wordBegin)
+			{
+				for (int j = 0; j < blockDim.x; j++)
+				{
+					derivh += reweight[blocksize + idx*blockDim.x + j] * derivA[j];
+					derivh += reweight[3 * blocksize + idx*blockDim.x + j] * derivI[j];
+					derivh += reweight[5 * blocksize + idx*blockDim.x + j] * derivF[j];
+					derivh += reweight[7 * blocksize + idx*blockDim.x + j] * derivO[j];
+				}
+			}
+			c_tanh = tanhf(outputC[output_dimension*w + gidx]);
+			o = outputO[output_dimension*w + gidx];
+			a = outputA[output_dimension*w + gidx];
+			i = outputI[output_dimension*w + gidx];
+			f = outputF[output_dimension*w + gidx];
+			float d_oinput = derivh * c_tanh * o * (1 - o);
+			deriv_c = derivh * o * (1 + c_tanh) * (1 - c_tanh);
+			if (w > wordBegin)
+				deriv_c += f * _derivc;
+
+			
+			float d_finput;
+			if (w < wordEnd - 1)
+				d_finput = deriv_c * outputC[output_dimension*(w + 1) + gidx] * f * (1 - f);
+			else
+				d_finput = 0;
+			
+			float d_iinput = deriv_c * a * i * (1 - i);
+			float d_ainput = deriv_c * i * (1 + a) * (1 - a);
+
+			_derivc = deriv_c;
+			outputA[output_dimension*w + gidx] = d_ainput;
+			outputI[output_dimension*w + gidx] = d_iinput;
+			outputF[output_dimension*w + gidx] = d_finput;
+			outputO[output_dimension*w + gidx] = d_oinput;
+
+			__syncthreads(); // make sure all threads have read _h before overwrite it
+			derivA[idx] = d_ainput;
+			derivI[idx] = d_iinput;
+			derivF[idx] = d_finput;
+			derivO[idx] = d_oinput;
+			__syncthreads(); // make sure all writes are done before any thread read it
+		}
+	}
+	else
+	{
+		//forward LSTM
+		int mpoolingIdx = maxpooling_index[output_dimension * idy + idx];
+		for (int w = wordEnd - 1; w >= wordBegin; w--)
+		{
+			derivh = 0;
+			if (mpoolingIdx == w)
+				derivh += derivup[output_dimension * idy + idx];
+
+			if (w < wordEnd - 1)
+			{
+				for (int j = 0; j < blockDim.x; j++)
+				{
+					derivh += reweight[idx*blockDim.x + j] * derivA[j];
+					derivh += reweight[2 * blocksize + idx*blockDim.x + j] * derivI[j];
+					derivh += reweight[4 * blocksize + idx*blockDim.x + j] * derivF[j];
+					derivh += reweight[6 * blocksize + idx*blockDim.x + j] * derivO[j];
+				}
+			}
+			c_tanh = tanhf(outputC[output_dimension*w + idx]);
+			o = outputO[output_dimension*w + idx];
+			a = outputA[output_dimension*w + idx];
+			i = outputI[output_dimension*w + idx];
+			f = outputF[output_dimension*w + idx];
+			float d_oinput = derivh * c_tanh * o * (1 - o);
+			deriv_c = derivh * o * (1 + c_tanh) * (1 - c_tanh);
+			if (w < wordEnd - 1)
+				deriv_c += f * _derivc;
+
+			
+			float d_finput;
+			if (w > wordBegin)
+				d_finput = deriv_c * outputC[output_dimension*(w - 1) + idx] * f * (1 - f);
+			else
+				d_finput = 0;
+
+			float d_iinput = deriv_c * a * i * (1 - i);
+			float d_ainput = deriv_c * i * (1 + a) * (1 - a);
+
+			_derivc = deriv_c;
+			outputA[output_dimension*w + idx] = d_ainput;
+			outputI[output_dimension*w + idx] = d_iinput;
+			outputF[output_dimension*w + idx] = d_finput;
+			outputO[output_dimension*w + idx] = d_oinput;
+
+			__syncthreads(); // make sure all threads have read _h before overwrite it
+			derivA[idx] = d_ainput;
+			derivI[idx] = d_iinput;
+			derivF[idx] = d_finput;
+			derivO[idx] = d_oinput;
+			__syncthreads(); // make sure all writes are done before any thread read it
+		}
+	}
+
+}
+
+void cuda_LSTM_Sequence_Backward(int * Smp_Index, int batchsize,
+	float * reweight, int * maxpooling_index, float * derivup, float * outputA, float * outputI, float * outputF, float * outputO, float * outputC, float * output, int output_dimension)
+{
+	int hdim = output_dimension / 2;
+	dim3 thread_tail(hdim, 1);
+	dim3 block_tail(2, batchsize);
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_sequence_backward<<<block_tail, thread_tail>>>(Smp_Index, batchsize, reweight, maxpooling_index, derivup, outputA, outputI, outputF, outputO, outputC, output, output_dimension, hdim*hdim);
+}
+
+
+__global__ void cuda_lstm_weight_deriv(uint32_t * Smp_Index1, uint32_t * Smp_Index2, uint32_t * Smp_Index3,
+	uint32_t * Word_Index1, uint32_t * Word_Index2, uint32_t * Word_Index3, uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * wordLT, float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, float * h1, float * h2, float * h3,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight, uint32_t hdim, uint32_t blocksize)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t ylimit = b_reweight == 1 ? hdim : fea_dimension;
+	if (idx < 4 * output_dimension && idy < ylimit)
+	{
+		uint32_t rev = (idx / hdim) % 2;
+		float gradient = 0.0;
+		uint32_t relativeIdx = idx % hdim;
+		uint32_t maxlen = Word_SeqLen1 > Word_SeqLen2 ? Word_SeqLen1 : Word_SeqLen2;
+
+		if (Word_SeqLen3 > maxlen)
+			maxlen = Word_SeqLen3;
+
+		float * outD1, *outD2, *outD3;
+		uint32_t startpos = 0;
+		if (idx < output_dimension)
+		{
+			outD1 = outA1;
+			outD2 = outA2;
+			outD3 = outA3;
+			startpos = rev == 0 ? 0 : blocksize;
+		}
+		else if (idx < 2 * output_dimension)
+		{
+			outD1 = outI1;
+			outD2 = outI2;
+			outD3 = outI3;
+			startpos = rev == 0 ? 2 * blocksize : 3 * blocksize;
+		}
+		else if (idx < 3 * output_dimension)
+		{
+			outD1 = outF1;
+			outD2 = outF2;
+			outD3 = outF3;
+			startpos = rev == 0 ? 4 * blocksize : 5 * blocksize;
+		}
+		else
+		{
+			outD1 = outO1;
+			outD2 = outO2;
+			outD3 = outO3;
+			startpos = rev == 0 ? 6 * blocksize : 7 * blocksize;
+		}
+
+		uint32_t smpidx1 = 0, smpidx2 = 0, smpidx3 = 0;
+		uint32_t boundary1 = Smp_Index1[0], boundary2 = Smp_Index2[0], boundary3 = Smp_Index3[0];
+		uint32_t firstw1 = 1, firstw2 = 1, firstw3 = 1;
+		for (uint32_t pos = 0; pos < maxlen; pos++)
+		{
+			if (pos < Word_SeqLen1)
+			{
+				if (firstw1 == 1)
+				{
+					firstw1 = 0;
+					if (rev == 0 && (b_reweight == 1 || outD1 == outF1)) // no computation since it is the first word, and there is no input for recurrent weight, or forget gate derivative is definitely zero (since s_t-1 = 0)
+						continue;
+				}
+				else if (pos == boundary1 - 1) /// last word of the current sentence
+				{
+					if (!(boundary1 == Word_SeqLen1))
+					{
+						boundary1 = Smp_Index1[++smpidx1];
+						firstw1 = 1; // next is the first word of the next sentence
+					}
+					if (rev == 1 && (b_reweight == 1 || outD1 == outF1))
+						continue;
+				}
+				if (b_reweight == 0)
+					gradient += outD1[output_dimension * pos + rev * hdim + relativeIdx] * wordLT[fea_dimension * Word_Index1[pos] + idy];
+				else
+					gradient += outD1[output_dimension * pos + rev * hdim + relativeIdx] * h1[output_dimension * (rev == 1 ? (pos + 1) : (pos - 1)) + rev * hdim + idy];
+			}
+
+			if (pos < Word_SeqLen2)
+			{
+				if (firstw2 == 1)
+				{
+					firstw2 = 0;
+					if (rev == 0 && (b_reweight == 1 || outD2 == outF2)) // no computation since it is the first word, and there is no input for recurrent weight, or forget gate derivative is definitely zero (since s_t-1 = 0)
+						continue;
+				}
+				else if (pos == boundary2 - 1) /// last word of the current sentence
+				{
+					if (!(boundary2 == Word_SeqLen2))
+					{
+						boundary2 = Smp_Index2[++smpidx2];
+						firstw2 = 1; // next is the first word of the next sentence
+					}
+					if (rev == 1 && (b_reweight == 1 || outD2 == outF2))
+						continue;
+				}
+				if (b_reweight == 0)
+					gradient += outD2[output_dimension * pos + rev * hdim + relativeIdx] * wordLT[fea_dimension * Word_Index2[pos] + idy];
+				else
+					gradient += outD2[output_dimension * pos + rev * hdim + relativeIdx] * h2[output_dimension * (rev == 1 ? (pos + 1) : (pos - 1)) + rev * hdim + idy];
+			}
+
+			if (pos < Word_SeqLen3)
+			{
+				if (firstw3 == 1)
+				{
+					firstw3 = 0;
+					if (rev == 0 && (b_reweight == 1 || outD3 == outF3)) // no computation since it is the first word, and there is no input for recurrent weight, or forget gate derivative is definitely zero (since s_t-1 = 0)
+						continue;
+				}
+				else if (pos == boundary3 - 1) /// last word of the current sentence
+				{
+					if (!(boundary3 == Word_SeqLen3))
+					{
+						boundary3 = Smp_Index3[++smpidx3];
+						firstw3 = 1; // next is the first word of the next sentence
+					}
+					if (rev == 1 && (b_reweight == 1 || outD3 == outF3))
+						continue;
+				}
+				if (b_reweight == 0)
+					gradient += outD3[output_dimension * pos + rev * hdim + relativeIdx] * wordLT[fea_dimension * Word_Index3[pos] + idy];
+				else
+					gradient += outD3[output_dimension * pos + rev * hdim + relativeIdx] * h3[output_dimension * (rev == 1 ? (pos + 1) : (pos - 1)) + rev * hdim + idy];
+			}
+		}
+
+		grad[startpos + hdim * idy + relativeIdx] = gradient;
+	}
+}
+
+void cuda_LSTM_Weight_Deriv(uint32_t * Smp_Index1, uint32_t * Smp_Index2, uint32_t * Smp_Index3, 
+	uint32_t * Word_Index1, uint32_t * Word_Index2, uint32_t * Word_Index3, uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3, 
+	float * wordLT, float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3, 
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, float * h1, float * h2, float * h3, 
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight)
+{
+	uint32_t hdim = output_dimension / 2;
+	uint32_t input_dim = 0;
+	if (b_reweight == 1)
+		input_dim = hdim;
+	else
+		input_dim = fea_dimension;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((4 * output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (input_dim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_weight_deriv<<<block_tail, thread_tail>>>(Smp_Index1, Smp_Index2, Smp_Index3, Word_Index1, Word_Index2, Word_Index3, 
+		Word_SeqLen1, Word_SeqLen2, Word_SeqLen3, wordLT, grad, outA1, outA2, outA3, outI1, outI2, outI3, outF1, outF2, outF3, 
+		outO1, outO2, outO3, h1, h2, h3, fea_dimension, output_dimension, b_reweight, hdim, hdim*hdim);
+}
+
+
+__global__ void cuda_lstm_weight_deriv_sup(uint32_t * Smp_Index1, uint32_t * Word_Index1, uint32_t Word_SeqLen1,
+	float * wordLT, float * grad, float * outA1, float * outI1, float * outF1, float * outO1, float * h1,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight, uint32_t hdim, uint32_t blocksize)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+	uint32_t ylimit = b_reweight == 1 ? hdim : fea_dimension;
+	if (idx < 4 * output_dimension && idy < ylimit)
+	{
+		uint32_t rev = (idx / hdim) % 2;
+		float gradient = 0.0;
+		uint32_t relativeIdx = idx % hdim;
+		
+
+		float * outD1;
+		uint32_t startpos = 0;
+		if (idx < output_dimension)
+		{
+			outD1 = outA1;
+			startpos = rev == 0 ? 0 : blocksize;
+		}
+		else if (idx < 2 * output_dimension)
+		{
+			outD1 = outI1;
+			startpos = rev == 0 ? 2 * blocksize : 3 * blocksize;
+		}
+		else if (idx < 3 * output_dimension)
+		{
+			outD1 = outF1;
+			startpos = rev == 0 ? 4 * blocksize : 5 * blocksize;
+		}
+		else
+		{
+			outD1 = outO1;
+			startpos = rev == 0 ? 6 * blocksize : 7 * blocksize;
+		}
+
+		uint32_t smpidx1 = 0;
+		uint32_t boundary1 = Smp_Index1[0];
+		uint32_t firstw1 = 1;
+		for (uint32_t pos = 0; pos < Word_SeqLen1; pos++)
+		{
+			if (firstw1 == 1)
+			{
+				firstw1 = 0;
+				if (rev == 0 && (b_reweight == 1 || outD1 == outF1)) // no computation since it is the first word, and there is no input for recurrent weight, or forget gate derivative is definitely zero (since s_t-1 = 0)
+					continue;
+			}
+			else if (pos == boundary1 - 1) /// last word of the current sentence
+			{
+				if (!(boundary1 == Word_SeqLen1))
+				{
+					boundary1 = Smp_Index1[++smpidx1];
+					firstw1 = 1; // next is the first word of the next sentence
+				}
+				if (rev == 1 && (b_reweight == 1 || outD1 == outF1))
+					continue;
+			}
+			if (b_reweight == 0)
+				gradient += outD1[output_dimension * pos + rev * hdim + relativeIdx] * wordLT[fea_dimension * Word_Index1[pos] + idy];
+			else
+				gradient += outD1[output_dimension * pos + rev * hdim + relativeIdx] * h1[output_dimension * (rev == 1 ? (pos + 1) : (pos - 1)) + rev * hdim + idy];
+
+		}
+
+		grad[startpos + hdim * idy + relativeIdx] = gradient;
+	}
+}
+
+void cuda_LSTM_Weight_Deriv_Sup(uint32_t * Smp_Index1, uint32_t * Word_Index1, uint32_t Word_SeqLen1,
+	float * wordLT, float * grad, float * outA1, float * outI1, float * outF1, float * outO1, float * h1,
+	uint32_t fea_dimension, uint32_t output_dimension, uint32_t b_reweight)
+{
+	uint32_t hdim = output_dimension / 2;
+	uint32_t input_dim = 0;
+	if (b_reweight == 1)
+		input_dim = hdim;
+	else
+		input_dim = fea_dimension;
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((4 * output_dimension + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (input_dim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_weight_deriv_sup<<<block_tail, thread_tail>>>(Smp_Index1, Word_Index1, Word_SeqLen1, wordLT, grad, outA1, outI1, outF1,
+		outO1, h1, fea_dimension, output_dimension, b_reweight, hdim, hdim*hdim);
+}
+
+
+__global__ void cuda_lstm_bias_deriv(uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, uint32_t output_dimension)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	
+	if (idx < 4 * output_dimension)
+	{
+		float gradient = 0.0;
+		uint32_t maxlen = Word_SeqLen1 > Word_SeqLen2 ? Word_SeqLen1 : Word_SeqLen2;
+		if (Word_SeqLen3 > maxlen)
+			maxlen = Word_SeqLen3;
+
+		float * outD1, *outD2, *outD3;
+		if (idx < output_dimension)
+		{
+			outD1 = outA1;
+			outD2 = outA2;
+			outD3 = outA3;
+		}
+		else if (idx < 2 * output_dimension)
+		{
+			outD1 = outI1;
+			outD2 = outI2;
+			outD3 = outI3;
+		}
+		else if (idx < 3 * output_dimension)
+		{
+			outD1 = outF1;
+			outD2 = outF2;
+			outD3 = outF3;
+		}
+		else
+		{
+			outD1 = outO1;
+			outD2 = outO2;
+			outD3 = outO3;
+		}
+		uint32_t ridx = idx % output_dimension;
+
+		for (uint32_t pos = 0; pos < maxlen; pos++)
+		{
+			if (pos < Word_SeqLen1)
+				gradient += outD1[output_dimension * pos + ridx];
+
+			if (pos < Word_SeqLen2)
+				gradient += outD2[output_dimension * pos + ridx];
+
+			if (pos < Word_SeqLen3)
+				gradient += outD3[output_dimension * pos + ridx];
+		}
+
+		grad[idx] = gradient;
+	}
+}
+
+void cuda_LSTM_Bias_Deriv(uint32_t Word_SeqLen1, uint32_t Word_SeqLen2, uint32_t Word_SeqLen3,
+	float * grad, float * outA1, float * outA2, float * outA3, float * outI1, float * outI2, float * outI3,
+	float * outF1, float * outF2, float * outF3, float * outO1, float * outO2, float * outO3, uint32_t output_dimension)
+{
+	
+	uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	uint32_t nBlockPerGrid = (4 * output_dimension + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_bias_deriv<<<nBlockPerGrid, nThreadPerBlock>>>(Word_SeqLen1, Word_SeqLen2, Word_SeqLen3, grad, outA1, outA2, outA3, 
+		outI1, outI2, outI3, outF1, outF2, outF3, outO1, outO2, outO3, output_dimension);
+}
+
+
+__global__ void cuda_lstm_bias_deriv_sup(uint32_t Word_SeqLen1, float * grad, float * outA1, float * outI1,
+	float * outF1, float * outO1, uint32_t output_dimension)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+	if (idx < 4 * output_dimension)
+	{
+		float gradient = 0.0;
+
+		float * outD1;
+		if (idx < output_dimension)
+		{
+			outD1 = outA1;
+		}
+		else if (idx < 2 * output_dimension)
+		{
+			outD1 = outI1;
+		}
+		else if (idx < 3 * output_dimension)
+		{
+			outD1 = outF1;
+		}
+		else
+		{
+			outD1 = outO1;
+		}
+		uint32_t ridx = idx % output_dimension;
+
+		for (uint32_t pos = 0; pos < Word_SeqLen1; pos++)
+		{
+			gradient += outD1[output_dimension * pos + ridx];
+		}
+
+		grad[idx] = gradient;
+	}
+}
+
+void cuda_LSTM_Bias_Deriv_Sup(uint32_t Word_SeqLen1, float * grad, float * outA1, float * outI1,
+	float * outF1, float * outO1, uint32_t output_dimension)
+{
+
+	uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	uint32_t nBlockPerGrid = (4 * output_dimension + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_bias_deriv_sup<<<nBlockPerGrid, nThreadPerBlock>>>(Word_SeqLen1, grad, outA1, outI1, outF1, outO1, output_dimension);
+}
+
+__global__ void cuda_lstm_compute_wvderiv(uint32_t Word_SeqLen, float * weight, float * grad, float * outA, float * outI, float * outF, float * outO, uint32_t fea_dim, 
+	uint32_t output_dim, uint32_t hdim, uint32_t blocksize)
+{
+	uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t idy = blockDim.y * blockIdx.y + threadIdx.y;
+
+	if (idx < fea_dim && idy < Word_SeqLen)
+	{
+		float gradient = 0.0;
+		for (uint32_t di = 0; di < output_dim; di++)
+		{
+			if (di < hdim)
+			{
+				gradient += weight[idx * hdim + di] * outA[idy * output_dim + di];
+				gradient += weight[blocksize * 2 + idx * hdim + di] * outI[idy * output_dim + di];
+				gradient += weight[blocksize * 4 + idx * hdim + di] * outF[idy * output_dim + di];
+				gradient += weight[blocksize * 6 + idx * hdim + di] * outO[idy * output_dim + di];
+			}
+			else
+			{
+				gradient += weight[blocksize + idx * hdim + (di - hdim)] * outA[idy * output_dim + di];
+				gradient += weight[blocksize * 3 + idx * hdim + (di - hdim)] * outI[idy * output_dim + di];
+				gradient += weight[blocksize * 5 + idx * hdim + (di - hdim)] * outF[idy * output_dim + di];
+				gradient += weight[blocksize * 7 + idx * hdim + (di - hdim)] * outO[idy * output_dim + di];
+			}
+		}
+		grad[idy * fea_dim + idx] = gradient;
+	}
+}
+
+void cuda_LSTM_Compute_WVDeriv(uint32_t Word_SeqLen, float * weight, float * grad, float * outA, float * outI, float * outF, float * outO, uint32_t fea_dim, uint32_t output_dim)
+{
+
+	dim3 thread_tail(DEFAULT_THREAD_PER_DIM, DEFAULT_THREAD_PER_DIM);
+	dim3 block_tail((fea_dim + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM, (Word_SeqLen + DEFAULT_THREAD_PER_DIM - 1) / DEFAULT_THREAD_PER_DIM);
+	//uint32_t nThreadPerBlock = DEFAULT_THREAD_PER_BLOCK;
+	//uint32_t nBlockPerGrid = ( m * n + DEFAULT_THREAD_PER_BLOCK - 1) / DEFAULT_THREAD_PER_BLOCK;
+	cuda_lstm_compute_wvderiv<<<block_tail, thread_tail>>>(Word_SeqLen, weight, grad, outA,
+		outI, outF, outO, fea_dim, output_dim, output_dim/2, (output_dim/2)*fea_dim);
 }
