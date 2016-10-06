@@ -40,8 +40,26 @@ namespace DSMlib
         public CudaPieceFloat recur_weight;
         public CudaPieceInt winsizes = null;
         public CudaPieceInt fmsizes = null;
-        public int[] wnd_sizes { get { return winsizes.MemPtr; } }
-        public int[] num_fms { get { return fmsizes.MemPtr; } } // number of feature maps for each window size. This array must have the same size as wnd_sizes and the sum of its elements must equal to Neural_Out.Number
+        public int[] wnd_sizes 
+        { 
+            get 
+            {
+                if (winsizes != null)
+                    return winsizes.MemPtr;
+                else
+                    return null;
+            } 
+        }
+        public int[] num_fms 
+        { 
+            get 
+            {
+                if (fmsizes != null)
+                    return fmsizes.MemPtr;
+                else
+                    return null;
+            } 
+        } // number of feature maps for each window size. This array must have the same size as wnd_sizes and the sum of its elements must equal to Neural_Out.Number
         public int[] ma_sizes;
         public NeuralLayer Extra_Input; // for extra context input, Nt = Composite_Full
         //***** Added by Ziyu Guan
@@ -1536,10 +1554,10 @@ namespace DSMlib
                     neurallinks[0].LayerPoolingI[q], neurallinks[0].LayerPoolingF[q], neurallinks[0].LayerPoolingO[q],
                     neurallinks[0].LayerPoolingInternalState[q], neurallinks[0].LayerPoolingOutputs[q], neurallinks[0].NeuralLinkModel.Neural_Out.Number);
 
-                neurallinks[0].LayerPoolingA[q].CopyOutFromCuda();
-                neurallinks[0].LayerPoolingI[q].CopyOutFromCuda();
-                neurallinks[0].LayerPoolingF[q].CopyOutFromCuda();
-                neurallinks[0].LayerPoolingO[q].CopyOutFromCuda();
+                //neurallinks[0].LayerPoolingA[q].CopyOutFromCuda();
+                //neurallinks[0].LayerPoolingI[q].CopyOutFromCuda();
+                //neurallinks[0].LayerPoolingF[q].CopyOutFromCuda();
+                //neurallinks[0].LayerPoolingO[q].CopyOutFromCuda();
             }
         }
 

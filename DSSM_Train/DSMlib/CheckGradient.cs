@@ -94,6 +94,7 @@ namespace DSMlib
                     ParameterSetting.ARCH_FMS,
                     false);
             dnn.Init();
+            //DNN test = dnn.CreateBackupClone();
             Program.Print("Neural Network Structure " + dnn.DNN_Descr());
         }
 
