@@ -15,6 +15,9 @@ namespace DSMlib
     {
         DNNRun dnn_runData = null;
 
+        public static Stopwatch timer_valid = new Stopwatch();
+        public static Stopwatch timer_batch = new Stopwatch();
+
         // for validation
         DNNRunForward dnn_forward = null;
         
@@ -303,8 +306,8 @@ namespace DSMlib
         /// <returns></returns>
         public override float Evaluate()
         {
-            Program.timer.Reset();
-            Program.timer.Start();
+            Weak_DNNTrain.timer_valid.Reset();
+            Weak_DNNTrain.timer_valid.Start();
             Program.Print("Strat evaluating...");
  	        validStream.Init_Batch();
             validStream.Next_Batch();
@@ -334,8 +337,8 @@ namespace DSMlib
                 }
             }
 
-            Program.timer.Stop();
-            Program.Print("Validation done : " + Program.timer.Elapsed.ToString());
+            Weak_DNNTrain.timer_valid.Stop();
+            Program.Print("Validation done : " + Weak_DNNTrain.timer_valid.Elapsed.ToString());
 
             return (interDist / interPairs) / (intraDist / intraPairs);           
 
@@ -599,8 +602,15 @@ namespace DSMlib
 
                 while (TriStream.Next_Batch())
                 {
+                    Weak_DNNTrain.timer_batch.Reset();
+                    Weak_DNNTrain.timer_batch.Start();
+
                     trainingLoss += feedstream_batch(new BatchSample_Input[] {TriStream.GPU_q0batch, TriStream.GPU_q1batch, TriStream.GPU_q2batch}, true);
                     mmindex += 1;
+
+                    Weak_DNNTrain.timer_batch.Stop();
+                    Program.Print("Processing time for Batch " + mmindex.ToString() + "is : " + Weak_DNNTrain.timer_batch.Elapsed.ToString());
+
                     if (mmindex % 50 == 0)
                     {
                         Console.WriteLine("Training done:{0}", mmindex.ToString());

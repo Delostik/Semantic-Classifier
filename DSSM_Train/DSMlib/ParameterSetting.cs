@@ -537,7 +537,7 @@ namespace DSMlib
         public static string MODEL_PATH = @"D:\t-yeshen\DSMLIB_Model_0616\DNN_MODEL";
         public static string Log_FileName = @"D:\t-yeshen\DSMLIB_Model_0616\LOG";
 
-        public static bool PSEUDO_RANDOM = true;
+        public static bool PSEUDO_RANDOM = false;
         //public static int[] RANDOM_SEED = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
         public static int RANDOM_SEED = 13;
         public static Random Random = null;
