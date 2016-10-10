@@ -173,6 +173,23 @@ namespace DSMlib
             calculate_distances(batches[0].batchsize);
         }
 
+        private void err_print(string fname, float[] data, int xsize, int ysize)
+        {
+            FileStream filef = new FileStream(fname, FileMode.Create, FileAccess.Write);
+            StreamWriter Writerf = new StreamWriter(filef);
+            for (int i = 0; i < xsize; i++)
+            {
+                for (int j = 0; j < ysize; j++)
+                {
+                    Writerf.Write(" ");
+                    Writerf.Write(data[xsize * j + i]);
+                }
+                Writerf.Write("\r\n");
+            }
+            Writerf.Close();
+            filef.Close();
+        }
+
         /*return the loss using by feedstream */
         //unsafe public float feedstream_batch( BatchSample_Input query_batch,  BatchSample_Input doc_batch, List<BatchSample_Input> negdoc_batches, bool train_update)
         unsafe public float feedstream_batch( BatchSample_Input[] batches, bool train_update)
@@ -196,11 +213,15 @@ namespace DSMlib
 
                     if (float.IsNaN(mlambda))
                     {
+                        err_print("dist.txt", Distance_Back, 2, batches[0].batchsize);
+                        dnn.printParam2Txt();
                         //Console.WriteLine("IsNaN");
                         throw new Exception("Error! NaN.");
                     }
                     if (float.IsInfinity(mlambda))
                     {
+                        err_print("dist.txt", Distance_Back, 2, batches[0].batchsize);
+                        dnn.printParam2Txt();
                         //Console.WriteLine("IsInfinity");
                         throw new Exception("Error! IsInfinity.");
                     }
@@ -609,7 +630,7 @@ namespace DSMlib
                     mmindex += 1;
 
                     Weak_DNNTrain.timer_batch.Stop();
-                    Program.Print("Processing time for Batch " + mmindex.ToString() + "is : " + Weak_DNNTrain.timer_batch.Elapsed.ToString());
+                    Program.Print("Processing time for Batch " + mmindex.ToString() + " is : " + Weak_DNNTrain.timer_batch.Elapsed.ToString());
 
                     if (mmindex % 50 == 0)
                     {

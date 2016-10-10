@@ -411,6 +411,105 @@ namespace DSMlib
                 neurallinks[i].CopyIntoCuda();
             }
         }
+
+        public void printParam2Txt()
+        {
+            CopyOutFromCuda();
+            FileStream filef = new FileStream("modelstate.txt", FileMode.Create, FileAccess.Write);
+            StreamWriter Writerf = new StreamWriter(filef);
+            Writerf.WriteLine("Word Lookup Table:");
+            for (int i = 0; i < wordLT.vecDim; i++)
+            {
+                for (int j = 0; j < wordLT.count; j++)
+                {
+                    Writerf.Write(" ");
+                    Writerf.Write(wordLT.Back_LookupTable[wordLT.vecDim * j + i]);
+                }
+                Writerf.Write("\r\n");
+            }
+            Writerf.Write("\r\n");
+
+            Writerf.WriteLine("Context Lookup Table:");
+            for (int i = 0; i < contextLT.vecDim; i++)
+            {
+                for (int j = 0; j < contextLT.count; j++)
+                {
+                    Writerf.Write(" ");
+                    Writerf.Write(contextLT.Back_LookupTable[wordLT.vecDim * j + i]);
+                }
+                Writerf.Write("\r\n");
+            }
+            Writerf.Write("\r\n");
+
+            for (int i = 0; i < neurallinks.Count; i++)
+            {
+                if (neurallinks[i].Nt == N_Type.bLSTM)
+                {
+                    Writerf.WriteLine("Layer " + (i+1).ToString() + ": BLSTM");
+                    int outputdim = neurallinks[i].Neural_Out.Number;
+                    int inputdim = neurallinks[i].Neural_In.Number;
+                    int blocksize = outputdim*inputdim/2;
+                    for (int j = 0; j < 8; j++)
+                    {
+                        Writerf.WriteLine("Weight matrix " + (j + 1).ToString() + ":");
+                        for (int k = 0; k < outputdim/2; k++)
+                        {
+                            for (int l = 0; l < inputdim; l++)
+                            {
+                                Writerf.Write(" ");
+                                Writerf.Write(neurallinks[i].Back_Weight[blocksize*j + outputdim/2*l + k]);
+                            }
+                            Writerf.Write("\r\n");
+                        }
+                    }
+                    Writerf.Write("\r\n");
+
+                    for (int j = 0; j < 8; j++)
+                    {
+                        Writerf.WriteLine("Recurrent Weight matrix " + (j + 1).ToString() + ":");
+                        for (int k = 0; k < outputdim / 2; k++)
+                        {
+                            for (int l = 0; l < inputdim; l++)
+                            {
+                                Writerf.Write(" ");
+                                Writerf.Write(neurallinks[i].Back_reWeight[blocksize * j + outputdim / 2 * l + k]);
+                            }
+                            Writerf.Write("\r\n");
+                        }
+                    }
+                    Writerf.Write("\r\n");
+
+                    Writerf.WriteLine("Bias:");
+                    for (int j = 0; j < neurallinks[i].Back_Bias.Length; j++)
+                    {
+                        Writerf.Write(" ");
+                        Writerf.Write(neurallinks[i].Back_Bias[j]);
+                    }
+                    Writerf.Write("\r\n\r\n");
+                }
+                else //do not distinguish other types of link
+                {
+                    Writerf.WriteLine("Layer " + (i + 1).ToString() + ":");
+                    Writerf.WriteLine("Weight matrix:");
+                    for (int k = 0; k < neurallinks[i].Back_Weight.Length; k++)
+                    {
+                        Writerf.Write(" ");
+                        Writerf.Write(neurallinks[i].Back_Weight[k]);                        
+                    }
+                    Writerf.Write("\r\n");
+
+                    Writerf.WriteLine("Bias:");
+                    for (int k = 0; k < neurallinks[i].Back_Bias.Length; k++)
+                    {
+                        Writerf.Write(" ");
+                        Writerf.Write(neurallinks[i].Back_Bias[k]);  
+                    }
+                    Writerf.Write("\r\n\r\n");
+                }
+            }
+            Writerf.Close();
+            filef.Close();
+        }
         /// <summary>
         /// For backward-compatible, neurallinks[i].Af = tanh is stored as 0, neurallinks[i].Af = linear is stored as 1, neurallinks[i].Af = rectified is stored as 2 
         /// Do not alter the ordering of those existing A_Func elements.
