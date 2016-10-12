@@ -172,7 +172,7 @@ namespace DSMlib
             calObj(objs);
             calculate_outputderiv(dis);
             dnn_runData.backward_propagate_deriv(batches);
-
+            //dnn.printParam2Txt();
             // copy derivatives out from gpu
             for (int i = 0; i < dnn_runData.neurallinks.Count; i++)
             {

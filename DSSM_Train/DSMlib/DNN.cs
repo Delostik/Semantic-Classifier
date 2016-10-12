@@ -435,7 +435,7 @@ namespace DSMlib
                 for (int j = 0; j < contextLT.count; j++)
                 {
                     Writerf.Write(" ");
-                    Writerf.Write(contextLT.Back_LookupTable[wordLT.vecDim * j + i]);
+                    Writerf.Write(contextLT.Back_LookupTable[contextLT.vecDim * j + i]);
                 }
                 Writerf.Write("\r\n");
             }

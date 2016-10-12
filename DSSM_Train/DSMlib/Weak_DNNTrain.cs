@@ -503,6 +503,7 @@ namespace DSMlib
         public override void Training()
         {
             Init();
+            
             DNN dnn_backup = null;
             Program.Print("Starting DNN Learning!");
 
